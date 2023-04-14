@@ -2,3 +2,4 @@
 *.html
 *.iter
 .ipynb_checkpoints/
+__pycache__/
