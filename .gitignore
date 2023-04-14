@@ -1,0 +1,4 @@
+*.pickle
+*.html
+*.iter
+*.ipynb_checkpoints
