@@ -9,7 +9,7 @@ import biogeme.biogeme as bio
 from biogeme.expressions import Beta, DefineVariable
 from biogeme.models import loglogit
 
-pandas = pd.read_table("netherlands.dat")
+pandas = pd.read_table("Data/netherlands.dat")
 database = db.Database("netherlands",pandas)
 pd.options.display.float_format = '{:.3g}'.format
 
@@ -28,8 +28,9 @@ database.remove(exclude)
 ASC_CAR		 = Beta('ASC_CAR',0,None,None,0)
 ASC_RAIL	 = Beta('ASC_RAIL',0,None,None,1)
 BETA_COST	 = Beta('BETA_COST',0,None,None,0)
-BETA_TT_CAR	 = Beta('BETA_TT_CAR',0,None,None,0)
-BETA_TT_RAIL = Beta('BETA_TT_RAIL',0,None,None,0)
+BETA_TT      = Beta('BETA_TT',0,None,None,0)
+#BETA_TT_CAR	 = Beta('BETA_TT_CAR',0,None,None,0)
+#BETA_TT_RAIL = Beta('BETA_TT_RAIL',0,None,None,0)
 
 # Define here arithmetic expressions for name that are not directly available from the data
 rail_time  = DefineVariable('rail_time',(  rail_ivtt   +  rail_acc_time   ) +  rail_egr_time  ,database)
@@ -39,8 +40,8 @@ car_cost_euro = DefineVariable('car_cost_euro', car_cost * rate_G2E,database)
 rail_cost_euro = DefineVariable('rail_cost_euro', rail_cost * rate_G2E,database)
 
 # Utilities
-__Car = ASC_CAR  + BETA_COST * car_cost_euro + BETA_TT_CAR * car_time
-__Rail = ASC_RAIL + BETA_COST * rail_cost_euro + BETA_TT_RAIL * rail_time
+__Car = ASC_CAR  + BETA_COST * car_cost_euro + BETA_TT * car_time
+__Rail = ASC_RAIL + BETA_COST * rail_cost_euro + BETA_TT * rail_time
 __V = {0: __Car,1: __Rail}
 __av = {0: 1,1: 1}
 
