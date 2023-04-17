@@ -117,7 +117,7 @@ class FeatureInteractions:
 
                 self.interactions[key].SplitValueHistogram.Merge(fi.SplitValueHistogram)
                 
-                self.interactions[key].Fornini.append(fi.Fornini)
+                self.interactions[key].Fornini += fi.Fornini
 
 
 class XgbModel:
@@ -171,7 +171,7 @@ class XgbModel:
         currentGain += tree.node.Gain
         currentCover += tree.node.Cover
         
-        fornini = [tree.node.Feature, tree.node.SplitValue, tree.node.Gain]
+        fornini = [tree.node.Feature, tree.node.SplitValue, tree.left.node.LeafValue, tree.right.node.LeafValue]
 
         pathProbabilityLeft = pathProbability * (tree.left.node.Cover / tree.node.Cover)
         pathProbabilityRight = pathProbability * (tree.right.node.Cover / tree.node.Cover)
@@ -209,7 +209,7 @@ class XgbModel:
             tfi.TreeIndex += self._treeIndex
             tfi.AverageTreeIndex = tfi.TreeIndex / tfi.FScore
             tfi.SplitValueHistogram.Merge(fi.SplitValueHistogram)
-            tfi.Fornini.append(fornini)
+            tfi.Fornini += fornini
 
         if (len(currentInteraction) - 1 == self._maxInteractionDepth):
             return
@@ -416,7 +416,7 @@ def FeatureInteractionsWriter(FeatureInteractions, fileName, MaxDepth, topK, Max
                                     "Average Gain", "Expected Gain", "Gain Rank", "FScore Rank",
                                     "wFScore Rank", "Avg wFScore Rank", "Avg Gain Rank",
                                     "Expected Gain Rank", "Average Rank", "Average Tree Index",
-                                    "Average Tree Depth"]):
+                                    "Average Tree Depth","HistoDataForNico"]):
             ws.write(0, col, name)
 
         gainSorted = rankInplace([-f.Gain for f in interactions])
@@ -624,6 +624,34 @@ def saveXgbFI(booster, feature_names=None, OutputXlsxFile='XgbFeatureInteraction
     featureInteractions = xgbModel.GetFeatureInteractions(MaxInteractionDepth, MaxDeepening)
     FeatureInteractionsWriter(featureInteractions, OutputXlsxFile, MaxInteractionDepth, TopK, MaxHistograms)
 
+def getHistoData(booster, feature_names=None, MaxTrees=100, MaxInteractionDepth=2, MaxDeepening=-1, TopK=100, MaxHistograms=10, SortBy='Gain'):
+    
+    if 'get_dump' not in dir(booster):
+        if 'get_booster' in dir(booster):
+            booster = booster.get_booster()
+        elif 'booster' in dir(booster):
+            booster = booster.booster()
+        else:
+            return -20
+    if feature_names is not None:
+        if isinstance(feature_names, list):
+            booster.feature_names = feature_names
+        else:
+            booster.feature_names = list(feature_names)
+            
+    FeatureScoreComparer(SortBy)
+    xgbParser = XgbModelParser()
+    dump = booster.get_dump('', with_stats=True)
+    xgbModel = xgbParser.GetXgbModelFromMemory(dump, MaxTrees)
+    featureInteractions = xgbModel.GetFeatureInteractions(MaxInteractionDepth, MaxDeepening)
+    histoData = []
+    
+    for depth in range(0, MaxInteractionDepth+1):
+        histoDataOfDepth = featureInteractions.GetFeatureInteractionsOfDepth(depth)
+        for h in histoDataOfDepth:
+            histoData += h.Fornini
+    
+    return histoData
 
 if __name__ == '__main__':
     entry_point()
