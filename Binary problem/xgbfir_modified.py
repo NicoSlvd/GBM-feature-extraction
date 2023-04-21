@@ -47,7 +47,15 @@ class SplitValueHistogram:
 
 class FeatureInteraction:
     #def __init__(self, interaction, gain, cover, pathProbability, depth, treeIndex, fScore=1):
+<<<<<<< HEAD
+<<<<<<< HEAD
+    def __init__(self, interaction, gain, cover, pathProbability, depth, treeIndex, forNonlinearPlot, fScore=1):
+=======
     def __init__(self, interaction, gain, cover, pathProbability, depth, treeIndex, fornini, fScore=1):
+>>>>>>> f5251d1992fdb7862cc930cb4724d8fb3c4d26e6
+=======
+    def __init__(self, interaction, gain, cover, pathProbability, depth, treeIndex, fornini, fScore=1):
+>>>>>>> parent of 2eb4853 (Binary problem on London dataset)
         self.SplitValueHistogram = SplitValueHistogram()
 
         features = sorted(interaction, key=lambda x: x.Feature)
@@ -76,7 +84,15 @@ class FeatureInteraction:
         self.SumLeafValuesRight = 0.0
         self.SumLeafCoversRight = 0.0
         
+<<<<<<< HEAD
+<<<<<<< HEAD
+        self.ForNonlinearPlot = forNonlinearPlot
+=======
         self.Fornini = fornini
+>>>>>>> f5251d1992fdb7862cc930cb4724d8fb3c4d26e6
+=======
+        self.Fornini = fornini
+>>>>>>> parent of 2eb4853 (Binary problem on London dataset)
 
     def __lt__(self, other):
         return self.Name < other.Name
@@ -117,7 +133,15 @@ class FeatureInteractions:
 
                 self.interactions[key].SplitValueHistogram.Merge(fi.SplitValueHistogram)
                 
+<<<<<<< HEAD
+<<<<<<< HEAD
+                self.interactions[key].ForNonlinearPlot += fi.ForNonlinearPlot
+=======
                 self.interactions[key].Fornini += fi.Fornini
+>>>>>>> f5251d1992fdb7862cc930cb4724d8fb3c4d26e6
+=======
+                self.interactions[key].Fornini += fi.Fornini
+>>>>>>> parent of 2eb4853 (Binary problem on London dataset)
 
 
 class XgbModel:
@@ -171,13 +195,29 @@ class XgbModel:
         currentGain += tree.node.Gain
         currentCover += tree.node.Cover
         
+<<<<<<< HEAD
+<<<<<<< HEAD
+        forNonlinearPlot = [tree.node.Feature, tree.node.SplitValue, tree.left.node.LeafValue, tree.right.node.LeafValue]
+=======
         fornini = [tree.node.Feature, tree.node.SplitValue, tree.left.node.LeafValue, tree.right.node.LeafValue]
+>>>>>>> f5251d1992fdb7862cc930cb4724d8fb3c4d26e6
+=======
+        fornini = [tree.node.Feature, tree.node.SplitValue, tree.left.node.LeafValue, tree.right.node.LeafValue]
+>>>>>>> parent of 2eb4853 (Binary problem on London dataset)
 
         pathProbabilityLeft = pathProbability * (tree.left.node.Cover / tree.node.Cover)
         pathProbabilityRight = pathProbability * (tree.right.node.Cover / tree.node.Cover)
 
         #fi = FeatureInteraction(currentInteraction, currentGain, currentCover, pathProbability, depth, self._treeIndex, 1)
+<<<<<<< HEAD
+<<<<<<< HEAD
+        fi = FeatureInteraction(currentInteraction, currentGain, currentCover, pathProbability, depth, self._treeIndex, forNonlinearPlot, 1)
+=======
         fi = FeatureInteraction(currentInteraction, currentGain, currentCover, pathProbability, depth, self._treeIndex, fornini, 1)
+>>>>>>> f5251d1992fdb7862cc930cb4724d8fb3c4d26e6
+=======
+        fi = FeatureInteraction(currentInteraction, currentGain, currentCover, pathProbability, depth, self._treeIndex, fornini, 1)
+>>>>>>> parent of 2eb4853 (Binary problem on London dataset)
 
         if (depth < self._maxDeepening) or (self._maxDeepening < 0):
             newInteractionLeft = []
@@ -209,7 +249,15 @@ class XgbModel:
             tfi.TreeIndex += self._treeIndex
             tfi.AverageTreeIndex = tfi.TreeIndex / tfi.FScore
             tfi.SplitValueHistogram.Merge(fi.SplitValueHistogram)
+<<<<<<< HEAD
+<<<<<<< HEAD
+            tfi.ForNonlinearPlot += forNonlinearPlot
+=======
             tfi.Fornini += fornini
+>>>>>>> f5251d1992fdb7862cc930cb4724d8fb3c4d26e6
+=======
+            tfi.Fornini += fornini
+>>>>>>> parent of 2eb4853 (Binary problem on London dataset)
 
         if (len(currentInteraction) - 1 == self._maxInteractionDepth):
             return
@@ -443,7 +491,15 @@ def FeatureInteractionsWriter(FeatureInteractions, fileName, MaxDepth, topK, Max
             ws.write(i + 1, 13, (6.0 + gainSorted[i] + fScoreSorted[i] + fScoreWeightedSorted[i] + averagefScoreWeightedSorted[i] + averageGainSorted[i] + expectedGainSorted[i]) / 6.0)
             ws.write(i + 1, 14, fi.AverageTreeIndex)
             ws.write(i + 1, 15, fi.AverageTreeDepth)
+<<<<<<< HEAD
+<<<<<<< HEAD
+            ws.write(i + 1, 16, str(fi.ForNonlinearPlot))
+=======
             ws.write(i + 1, 16, str(fi.Fornini))
+>>>>>>> f5251d1992fdb7862cc930cb4724d8fb3c4d26e6
+=======
+            ws.write(i + 1, 16, str(fi.Fornini))
+>>>>>>> parent of 2eb4853 (Binary problem on London dataset)
 
     interactions = FeatureInteractions.GetFeatureInteractionsWithLeafStatistics()
     if interactions:
@@ -649,7 +705,15 @@ def getHistoData(booster, feature_names=None, MaxTrees=100, MaxInteractionDepth=
     for depth in range(0, MaxInteractionDepth+1):
         histoDataOfDepth = featureInteractions.GetFeatureInteractionsOfDepth(depth)
         for h in histoDataOfDepth:
+<<<<<<< HEAD
+<<<<<<< HEAD
+            histoData += h.ForNonlinearPlot
+=======
             histoData += h.Fornini
+>>>>>>> f5251d1992fdb7862cc930cb4724d8fb3c4d26e6
+=======
+            histoData += h.Fornini
+>>>>>>> parent of 2eb4853 (Binary problem on London dataset)
     
     return histoData
 
