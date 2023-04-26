@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "../../../../../anaconda3/envs/lightgbm/Lib/site-packages/lightgbm"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {}
+}
