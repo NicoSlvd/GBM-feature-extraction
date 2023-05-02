@@ -8,9 +8,9 @@ import biogeme.biogeme as bio
 from biogeme.expressions import Beta, DefineVariable
 from biogeme.models import loglogit
 import biogeme.models as models
+from sklearn.model_selection import train_test_split
 
 df = pd.read_csv("Data/swissmetro.dat", sep = '\t')
-df_train, df_test = train_test_split(df, test_size=0.2, random_state = 42)
 
 database = db.Database("swissmetro", df_train)
 
@@ -19,6 +19,8 @@ globals().update(database.variables)
 # Exclude data
 exclude = (( PURPOSE != 1 ) * ( PURPOSE != 3 ) + ( CHOICE == 0 )) > 0
 database.remove(exclude)
+
+df_train, df_test = train_test_split(df, test_size=0.2, random_state = 42)
 
 # Parameters to be estimated
 ASC_CAR   = Beta('ASC_CAR', 0, None, None, 0)
@@ -30,8 +32,8 @@ B_COST = Beta('B_COST', 0, None, None, 0)
 B_HE   = Beta('B_HE',   0, None, None, 0)
 
 # Definition of new variables
-TRAIN_COST = DefineVariable('TRAIN_COST', TRAIN_CO * ( GA == 0 ), database)
-SM_COST    = DefineVariable('SM_COST', SM_CO * ( GA == 0 ), database)
+TRAIN_COST = database.DefineVariable('TRAIN_COST', TRAIN_CO * ( GA == 0 ))
+SM_COST    = database.DefineVariable('SM_COST', SM_CO * ( GA == 0 ))
 
 # Utilities
 V_TRAIN = ASC_TRAIN + B_TIME * TRAIN_TT + B_COST * TRAIN_COST + B_HE * TRAIN_HE
