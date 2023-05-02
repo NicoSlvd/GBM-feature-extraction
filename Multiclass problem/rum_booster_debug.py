@@ -23,8 +23,8 @@ choice = swissmetro[['CHOICE']] -1
 
 X_train, X_test, y_train, y_test = train_test_split(feature, choice, test_size=0.2, random_state = 42)
 
-param = {'max_depth': 3, 
-         'num_iterations': 100, 
+param = {'max_depth': 1, 
+         'num_iterations': 1000, 
          'objective':'multiclass',
          'monotone_constraints': [-1, -1, -1, -1, -1, -1, -1, -1], 
          'interaction_constraints': [[0], [1], [2], [3], [4], [5], [6], [7]],
