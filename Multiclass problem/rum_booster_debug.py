@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
-from lightgbm.rumbooster import rum_train, rum_cv
+from rumbooster import rum_train, rum_cv
 
 from sklearn.model_selection import train_test_split
 
@@ -23,8 +23,8 @@ choice = swissmetro[['CHOICE']] -1
 
 X_train, X_test, y_train, y_test = train_test_split(feature, choice, test_size=0.2, random_state = 42)
 
-param = {'max_depth': 1, 
-         'num_iterations': 1000, 
+param = {'max_depth': 3, 
+         'num_iterations': 300, 
          'objective':'multiclass',
          'monotone_constraints': [-1, -1, -1, -1, -1, -1, -1, -1], 
          'interaction_constraints': [[0], [1], [2], [3], [4], [5], [6], [7]],
@@ -47,7 +47,7 @@ rum_structure_1= [{'columns': ['TRAIN_TT', 'TRAIN_CO', 'TRAIN_HE'],
                   'monotone_constraints': [-1, -1],
                   'interaction_constraints': [0, 1]}]
 
-lightgbm_1 = rum_train(param, train_data, valid_sets=[train_data], rum_structure=rum_structure_1)
+lightgbm_1 = rum_train(param, train_data, valid_sets=[validation_data], rum_structure=rum_structure_1)
 '''lightgbm_cv = rum_cv(param, train_data, num_boost_round=10,
                      folds=None, nfold=5, stratified=True, shuffle=True,
                      metrics=None, fobj=None, feval=None, init_model=None,

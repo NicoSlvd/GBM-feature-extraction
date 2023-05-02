@@ -13,9 +13,9 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from . import callback
-from .basic import Booster, Dataset, LightGBMError, _ConfigAliases, _InnerPredictor, _choose_param_value, _log_warning
-from .compat import SKLEARN_INSTALLED, _LGBMGroupKFold, _LGBMStratifiedKFold
+from lightgbm import callback
+from lightgbm.basic import Booster, Dataset, LightGBMError, _ConfigAliases, _InnerPredictor, _choose_param_value, _log_warning
+from lightgbm.compat import SKLEARN_INSTALLED, _LGBMGroupKFold, _LGBMStratifiedKFold
 
 _LGBM_CustomObjectiveFunction = Callable[
     [Union[List, np.ndarray], Dataset],
@@ -818,7 +818,7 @@ def rum_train(
         #does not support cv, to implement
         if valid_sets is not None:
             if is_valid_contain_train:
-                cross_entropy = rum_booster.cross_entropy(preds, train_set)
+                cross_entropy = rum_booster.cross_entropy(rum_booster._preds, train_set)
             else:
                 for valid_set_J in rum_booster.valid_sets:
                     preds_valid = rum_booster._inner_predict(valid_set_J)
@@ -1204,4 +1204,3 @@ def rum_cv(params, train_set, num_boost_round=100,
         results['cvbooster'] = cvfolds
 
     return dict(results)
-
