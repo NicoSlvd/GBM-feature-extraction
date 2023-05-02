@@ -777,7 +777,7 @@ def rum_train(
     # this is probably most the work - need to set up custom objective function and evaluation function
     # fobj will need to have access to the current utility values for each class
     
-    self._preds = rum_booster._inner_predict()
+    rum_booster._preds = rum_booster._inner_predict()
     for i in range(init_iteration, init_iteration + num_boost_round):
         early_stop_crit_all = [False] * params['num_classes']
         for j, booster in enumerate(rum_booster.boosters):
@@ -792,8 +792,8 @@ def rum_train(
             #grad, hess = f_obj(preds_j, train_set_j[j])
             #print(booster)
             #booster.__boost(grad, hess)
-            self._current_j = j
-            booster.update(train_set=rum_booster.train_set[j], fobj=self.f_obj)
+            rum_booster._current_j = j
+            booster.update(train_set=rum_booster.train_set[j], fobj=rum_booster.f_obj)
             evaluation_result_list = []
             # check evaluation result.
             if valid_sets is not None:
@@ -813,7 +813,7 @@ def rum_train(
                 booster.best_iteration = earlyStopException.best_iteration + 1
                 evaluation_result_list = earlyStopException.best_score
                 #break
-        self._preds = rum_booster._inner_predict()
+        rum_booster._preds = rum_booster._inner_predict()
 
         #does not support cv, to implement
         if valid_sets is not None:
