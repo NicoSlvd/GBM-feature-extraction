@@ -11,8 +11,7 @@ import biogeme.models as models
 from sklearn.model_selection import train_test_split
 
 df = pd.read_csv("Data/swissmetro.dat", sep = '\t')
-
-database = db.Database("swissmetro", df_train)
+database = db.Database("swissmetro", df)
 
 globals().update(database.variables)
 
@@ -21,6 +20,9 @@ exclude = (( PURPOSE != 1 ) * ( PURPOSE != 3 ) + ( CHOICE == 0 )) > 0
 database.remove(exclude)
 
 df_train, df_test = train_test_split(df, test_size=0.2, random_state = 42)
+
+database_train = db.Database("swissmetro_train", df_train)
+database_test = db.Database("swissmetro_test", df_test)
 
 # Parameters to be estimated
 ASC_CAR   = Beta('ASC_CAR', 0, None, None, 0)
@@ -32,8 +34,8 @@ B_COST = Beta('B_COST', 0, None, None, 0)
 B_HE   = Beta('B_HE',   0, None, None, 0)
 
 # Definition of new variables
-TRAIN_COST = database.DefineVariable('TRAIN_COST', TRAIN_CO * ( GA == 0 ))
-SM_COST    = database.DefineVariable('SM_COST', SM_CO * ( GA == 0 ))
+TRAIN_COST = database_train.DefineVariable('TRAIN_COST', TRAIN_CO * ( GA == 0 ))
+SM_COST    = database_train.DefineVariable('SM_COST', SM_CO * ( GA == 0 ))
 
 # Utilities
 V_TRAIN = ASC_TRAIN + B_TIME * TRAIN_TT + B_COST * TRAIN_COST + B_HE * TRAIN_HE
@@ -45,7 +47,7 @@ av = {1: TRAIN_AV, 2: SM_AV, 3: CAR_AV}
 
 # Choice model estimation
 logprob = loglogit(V, av, CHOICE)
-biogeme = bio.BIOGEME(database, logprob)
+biogeme = bio.BIOGEME(database_train, logprob)
 biogeme.modelName = "Base Model"
 
 biogeme.generateHtml = False
@@ -56,7 +58,7 @@ results = biogeme.estimate()
 # Results
 pandasResults = results.getEstimatedParameters()
 print(pandasResults)
-print(f"Nbr of observations: {database.getNumberOfObservations()}")
+print(f"Nbr of observations: {database_train.getNumberOfObservations()}")
 print(f"LL(0) = {results.data.initLogLike:.3f}")
 print(f"LL(beta) = {results.data.logLike:.3f}")
 print(f"rho bar square = {results.data.rhoBarSquare:.3g}")
