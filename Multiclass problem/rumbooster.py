@@ -27,19 +27,6 @@ _LGBM_CustomMetricFunction = Callable[
 ]
 
 
-def f_obj(
-        preds: np.ndarray, 
-        train_set: Dataset
-):
-    grad = []
-    hess = []
-    eps = 1e-6
-    labels = train_set.get_label()
-    for l, p in enumerate(preds):
-        grad.append(p - labels[l])
-        hess.append(np.maximum(p * (1 - p), eps))
-    return grad, hess
-    
 
 
 class RUMBooster:
@@ -81,6 +68,20 @@ class RUMBooster:
         #    with open(model_file, "r") as file:
         #        self._from_dict(json.load(file))
 
+    
+    def f_obj(
+            self,
+            _,
+            train_set
+        ):
+            j = self._current_j
+            preds = self._preds[:,j]
+            eps = 1e-6
+            labels = train_set.get_label()
+            grad = preds - labels
+            hess = np.maximum(preds * (1 - preds), eps)
+            return grad, hess
+            
     def predict(
         self,
         data,
@@ -776,7 +777,7 @@ def rum_train(
     # this is probably most the work - need to set up custom objective function and evaluation function
     # fobj will need to have access to the current utility values for each class
     
-    preds = rum_booster._inner_predict()
+    self._preds = rum_booster._inner_predict()
     for i in range(init_iteration, init_iteration + num_boost_round):
         early_stop_crit_all = [False] * params['num_classes']
         for j, booster in enumerate(rum_booster.boosters):
@@ -786,13 +787,13 @@ def rum_train(
                                         iteration=i,
                                         begin_iteration=init_iteration,
                                         end_iteration=init_iteration + num_boost_round,
-                                        evaluation_result_list=None))
-            
-            preds_J = preds.T[j]
+                                        evaluation_result_list=None))       
+    
             #grad, hess = f_obj(preds_j, train_set_j[j])
             #print(booster)
             #booster.__boost(grad, hess)
-            booster.update(train_set=rum_booster.train_set[j], fobj=f_obj, preds=preds_J)
+            self._current_j = j
+            booster.update(train_set=rum_booster.train_set[j], fobj=self.f_obj)
             evaluation_result_list = []
             # check evaluation result.
             if valid_sets is not None:
@@ -812,7 +813,7 @@ def rum_train(
                 booster.best_iteration = earlyStopException.best_iteration + 1
                 evaluation_result_list = earlyStopException.best_score
                 #break
-        preds = rum_booster._inner_predict()
+        self._preds = rum_booster._inner_predict()
 
         #does not support cv, to implement
         if valid_sets is not None:
@@ -1172,7 +1173,7 @@ def rum_cv(params, train_set, num_boost_round=100,
                                             end_iteration=num_boost_round,
                                             evaluation_result_list=None))
                 preds_J = preds.T[j]
-                booster.update(train_set = rumbooster.train_set[j], fobj=f_obj, preds = preds_J)
+                booster.update(train_set = rumbooster.train_set[j], fobj=self.f_obj, preds = preds_J)
 
             valid_sets = rumbooster.valid_sets
             for valid_set in valid_sets:
