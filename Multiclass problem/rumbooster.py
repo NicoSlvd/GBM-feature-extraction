@@ -44,8 +44,9 @@ class RUMBooster:
     ----------
     boosters : list of Booster
         The list of underlying fitted models.
-    best_iteration : int
-        The best iteration of fitted model.
+    valid_sets : None
+        Validation sets of the RUMBooster. By default None, to avoid computing cross entropy if there are no 
+        validation sets.
     """
     def __init__(self, model_file = None):
         """Initialize the RUMBooster.
@@ -68,6 +69,17 @@ class RUMBooster:
             _,
             train_set
         ):
+            """
+            Objective function of the binary classification boosters, but based on softmax predictions
+
+            Parameters
+            ----------
+            train_set: Dataset
+                Training set used to train the jth booster. It means that it is not the full training set but rather
+                another dataset containing the relevant features for that utility. It is the jth dataset in the
+                RUMBooster object.
+
+            """
             j = self._current_j
             preds = self._preds[:,j]
             eps = 1e-6
