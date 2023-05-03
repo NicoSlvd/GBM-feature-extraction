@@ -47,7 +47,7 @@ class RUMBooster:
     best_iteration : int
         The best iteration of fitted model.
     """
-    def __init__(self, params=None, train_set=None):
+    def __init__(self, model_file = None):
         """Initialize the RUMBooster.
 
         Parameters
@@ -56,17 +56,11 @@ class RUMBooster:
             Path to the RUMBooster model file.
         """
         self.boosters = []
-        self.rum_structure = []
-        self.params = {} if params is None else params
-        self.train_set = train_set
         self.valid_sets = None
-        self.best_iteration = -1
-        self.best_score = 1000000
 
-        #to implement: load a model file
-        #if model_file is not None:
-        #    with open(model_file, "r") as file:
-        #        self._from_dict(json.load(file))
+        if model_file is not None:
+            with open(model_file, "r") as file:
+                self._from_dict(json.load(file))
 
     
     def f_obj(
@@ -127,7 +121,11 @@ class RUMBooster:
             Can be sparse or a list of sparse objects (each element represents predictions for one class) for feature contributions (when ``pred_contrib=True``).
         """
         U = []
+        
+        #separate features in J corresponding datasets
         new_data, _ = self._preprocess_data(data)
+        
+        #compute utilities with corresponding features
         for k, booster in enumerate(self.boosters):
             U.append(booster.predict(new_data[k].get_data(), 
                             start_iteration, 
@@ -138,6 +136,8 @@ class RUMBooster:
                             data_has_header,
                             validate_features))
         preds = np.array(U).T
+
+        #softmax
         if not utilities:
             preds = self._stablesoftmax(preds)
    
@@ -188,9 +188,12 @@ class RUMBooster:
             Can be sparse or a list of sparse objects (each element represents predictions for one class) for feature contributions (when ``pred_contrib=True``).
         """
         U = []
+
+        #getting dataset
         if data is None:
             data = self.train_set
 
+        #compute utilities with corresponding features
         for k, booster in enumerate(self.boosters):
             U.append(booster.predict(data[k].get_data(), 
                             start_iteration, 
@@ -201,9 +204,11 @@ class RUMBooster:
                             data_has_header,
                             validate_features))
         preds = np.array(U).T
+
+        #softmax
         if not utilities:
             preds = self._stablesoftmax(preds)
-   
+
         return preds
     
     def _stablesoftmax(self, x):
@@ -212,8 +217,21 @@ class RUMBooster:
         exps = np.exp(shiftx)
         return exps / exps.sum(axis=1)[:,None]
     
-    def cross_entropy(self, preds, data):
-        labels = data.get_label().astype(int)
+    def cross_entropy(self, preds, labels):
+        """
+        Compute cross entropy of the RUMBooster model for the given predictions and data
+        
+        Parameters
+        ----------
+        preds: ndarray
+            Predictions for all data points and each classes from a softmax function. preds[i, j] correspond
+            to the prediction of data point i to belong to class j
+        labels: ndarray
+            The labels of the original dataset, as int
+        Returns
+        -------
+        Cross entropy : float
+        """
         c_entr = 0
         for i, l in enumerate(labels):
             c_entr += np.log(preds[i, l])
@@ -221,25 +239,26 @@ class RUMBooster:
         return - c_entr / len(labels)
     
     def _preprocess_data(self, data, reduced_valid_set = None, return_data = False):
-
+        """Set up J training (and, if specified, validation) datasets"""
         train_set_J = []
         reduced_valid_sets_J = []
 
+        #to access data
         data.construct()
 
         for j, struct in enumerate(self.rum_structure):
             if struct:
                 if 'columns' in struct:
-                    train_set_j_data = data.get_data()[struct['columns']]
-                    new_label = np.array([1 if l == j else 0 for l in data.get_label()])
+                    train_set_j_data = data.get_data()[struct['columns']] #only relevant features for the j booster
+                    new_label = np.array([1 if l == j else 0 for l in data.get_label()]) #new binary label
                     train_set_j = Dataset(train_set_j_data, label=new_label, free_raw_data=False)
                     train_set_j.construct()
                     if reduced_valid_set is not None:
                         reduced_valid_sets_j = []
                         for valid_set in reduced_valid_set:
                             valid_set.construct()
-                            valid_set_j_data = valid_set.get_data()[struct['columns']]
-                            label_valid = valid_set.get_label()
+                            valid_set_j_data = valid_set.get_data()[struct['columns']] #only relevant features for the j booster
+                            label_valid = valid_set.get_label()#new binary label
                             valid_set_j = Dataset(valid_set_j_data, label=label_valid, reference= train_set_j, free_raw_data=False)
                             valid_set_j.construct()
                             reduced_valid_sets_j.append(valid_set_j)
@@ -254,13 +273,14 @@ class RUMBooster:
             if reduced_valid_set is not None:
                 reduced_valid_sets_J.append(reduced_valid_sets_j)
 
+        #storing them in the RUMBooster object
         self.train_set = train_set_J
         self.valid_sets = np.array(reduced_valid_sets_J).T.tolist()
         if return_data:
             return train_set_J, reduced_valid_sets_J
     
     def _preprocess_params(self, params, return_params=False):
-
+        """Set up J set of parameters"""
         params_J = []
 
         for struct in self.rum_structure:
@@ -280,12 +300,16 @@ class RUMBooster:
             return params_J
         
     def _preprocess_valids(self, train_set, params, valid_sets = None, valid_names = None):
-        
+        """Set up validation sets"""
+        #construct training set to access data
         train_set.construct()
+
+        #initializing variables
         is_valid_contain_train = False
         train_data_name = "training"
         reduced_valid_sets = []
         name_valid_sets = []
+
         if valid_sets is not None:
             if isinstance(valid_sets, Dataset):
                 valid_sets = [valid_sets]
@@ -311,13 +335,15 @@ class RUMBooster:
     
     def _construct_boosters(self, train_data_name = "Training", is_valid_contain_train = False,
                             name_valid_sets = None):
-
+        """Construct boosters of the RUMBooster model with corresponding set of parameters and training features"""
+        #getting parameters, training, and validation sets
         params_J = self.params
         train_set_J = self.train_set
         reduced_valid_sets_J = self.valid_sets
 
         for j in range(len(self.rum_structure)):
             try: 
+                #construct binary booster
                 booster = Booster(params=params_J[j], train_set=train_set_J[j])
                 if is_valid_contain_train:
                     booster.set_train_data_name(train_data_name)
@@ -330,6 +356,7 @@ class RUMBooster:
             booster.best_iteration = 0
             self._append(booster)
         self.best_iteration = 0
+        self.best_score = 1000000
 
 
     def _append(self, booster: Booster) -> None:
@@ -368,6 +395,15 @@ class RUMBooster:
         vars(self).update(state)
 
     def getweights(self):
+        """
+        get leaf values from a RUMBooster or LightGBM model
+
+        Returns
+        -------
+        weights_df: DataFrame
+            DataFrame containing all split points and their corresponding left and right leaves value, 
+            for all features
+        """
         model_json = self.dump_model()
         weights = []
 
@@ -380,27 +416,42 @@ class RUMBooster:
                 right_leaf_value = trees['tree_structure']['right_child']['leaf_value']
                 weights.append([feature, split_point, left_leaf_value, right_leaf_value])
 
-        return pd.DataFrame(weights, columns= ['Feature', 'Split point', 'Left leaf value', 'Right leaf value'])
+        weights_df = pd.DataFrame(weights, columns= ['Feature', 'Split point', 'Left leaf value', 'Right leaf value'])
+        return weights_df
 
     def weights_to_plot(self):
+        """
+        Arrange weights by ascending splitting points and cumulative sum of weights
 
+        Returns
+        -------
+        weights_for_plot: dict
+            Dictionary containing splitting points and corresponding cumulative weights value for all features
+        """
+        #get raw weights
         weights = self.getweights()
 
         weights_for_plot = {}
-
+        #for all features
         for f in weights.Feature.unique():
             split_points = []
             function_value = [0]
             
+            #sort by ascending order
             feature_data = weights[weights.Feature == f]
             ordered_data = feature_data.sort_values(by = ['Split point'], ignore_index = True)
             for i, s in enumerate(ordered_data['Split point']):
+                #new split point
                 if s not in split_points:
                     split_points.append(s)
+                    #add a new right leaf value to the current right side value
                     function_value.append(function_value[-1] + float(ordered_data.loc[i, 'Right leaf value']))
+                    #add left leaf value to all other current left leaf values
                     function_value[:-1] = [h + float(ordered_data.loc[i, 'Left leaf value']) for h in function_value[:-1]]
                 else:
+                    #add right leaf value to the current right side value
                     function_value[-1] += float(ordered_data.loc[i, 'Right leaf value'])
+                    #add left leaf value to all other current left leaf values
                     function_value[:-2] = [h + float(ordered_data.loc[i, 'Left leaf value']) for h in function_value[:-2]]
                     
             weights_for_plot[f] = {'Splitting points': split_points,
@@ -409,23 +460,69 @@ class RUMBooster:
         return weights_for_plot
     
     def non_lin_function(self, weights_ordered, x_min, x_max, num_points):
-        
+        """
+        Create the nonlinear function for parameters, from weights ordered by ascending splitting points
+
+        Parameters
+        ----------
+        weights_ordered : dict
+            Dictionary containing splitting points and corresponding cumulative weights value for a specific 
+            feature's parameter
+        x_min : float, int
+            Minimum x value for which the nonlinear function is computed
+        x_max : float, int
+            Maximum x value for which the nonlinear function is computed
+        num_points: int
+            Number of points used to draw the nonlinear function line
+
+        Returns
+        -------
+        x_values: list
+            X values for which the function will be plotted
+        nonlin_function: list
+            Values of the function at the corresponding x points
+        """
+        #create x points
         x_values = np.linspace(x_min, x_max, num_points)
         nonlin_function = []
         i = 0
-        max_i = len(weights_ordered['Splitting points'])
+        max_i = len(weights_ordered['Splitting points']) #all splitting points
         for x in x_values:
+            #compute the value of the function at x according to the weights value in between splitting points
             if x < float(weights_ordered['Splitting points'][i]):
                 nonlin_function += [float(weights_ordered['Histogram values'][i])]
             else:
                 nonlin_function += [float(weights_ordered['Histogram values'][i+1])]
+                #go to next splitting points
                 if i < max_i-1:
                     i+=1
         
         return x_values, nonlin_function
     
-    def plot_parameters(self, params, X, units, Betas = None , withPointDist = False, model_unconstrained = None, params_unc = None):
-        
+    def plot_parameters(self, params, X, units, Betas = None , withPointDist = False, model_unconstrained = None, 
+                        params_unc = None):
+        """
+        Plot the non linear impact of parameters on the utility function. When specified, unconstrained parameters
+        and parameters from a RUM model can be added to the plot.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary containing parameters used to train the RUM booster.
+        X : pandas dataframe
+            Features used to train the model, in a pandas dataframe.
+        Betas : list, optional (default = None)
+            List of beta parameters value from a RUM. They should be listed in the same order as 
+            in the RUMBooster model.
+        withPointDist: Bool, optional (default = False)
+            If True, the distribution of the training samples for the corresponding features will be plot 
+            on the x axis
+        model_unconstrained: LightGBM model, optional (default = None)
+            The unconstrained model. Must be trained and compatible with dump_model().
+        params_unc: dict, optional (default = None)
+            Dictionary containing parameters used to train the unconstrained model
+        """
+        #getting learning rate
         if params['learning_rate'] is not None:
             lr = float(params['learning_rate'])
         else:
@@ -449,6 +546,8 @@ class RUMBooster:
         #    raise Exception('L1 and L2 regularization are not supported, please set alpha and lambda to 0 in the classifier')
         #elif (float(params_unc['alpha']) + float(params_unc['lambda'])) != 0:
         #    raise Exception('L1 and L2 regularization are not supported, please set alpha and lambda to 0 in the classifier')
+        
+        #get and prepare weights
         weights = self.getweights()
 
         weights_arranged = self.weights_to_plot()
@@ -458,30 +557,36 @@ class RUMBooster:
 
         sns.set_theme()
         
+        #for all features parameters
         for i, f in enumerate(weights.Feature.unique()):
             
+            #create nonlinear plot
             x, non_lin_func = self.non_lin_function(weights_arranged[f], 0, 1.1*max(X[f]), 1000)
             
             non_lin_func_with_lr = [h/lr for h in non_lin_func]
             
+            #plot parameters
             plt.figure(figsize=(10, 6))
             sns.lineplot(x=x, y=non_lin_func_with_lr, lw=2)
             plt.title('Influence of {} on the predictive function (utility)'.format(f), fontdict={'fontsize':  16})
             plt.xlabel('{} [{}]'.format(f, units[i]))
             plt.ylabel('Utility')          
 
-            
+            #plot unconstrained model parameters
             if model_unconstrained is not None:
                 _, non_lin_func_unc = self.non_lin_func(weights_arranged_unc[f], 0, 1.1*max(X[f]), 1000)
                 non_lin_func_with_lr_unc =  [h_unc/lr_unc for h_unc in non_lin_func_unc]
                 sns.lineplot(x=x, y=non_lin_func_with_lr_unc, lw=2)      
             
+            #plot RUM parameters
             if Betas is not None:
                 sns.lineplot(x=x, y=Betas[i]*x)
-                
+            
+            #plot data distribution
             if withPointDist:
                 sns.scatterplot(x=x, y=0*x, s=100, alpha=0.1)
             
+            #legend
             if Betas is not None:
                 if model_unconstrained is not None:
                     if withPointDist:
@@ -696,6 +801,7 @@ def rum_train(
         The trained RUMBooster model.
     """
     # create predictor first
+    start_time = time.time()
     params = copy.deepcopy(params)
     params = _choose_param_value(
         main_param_name='objective',
@@ -764,22 +870,25 @@ def rum_train(
     callbacks_before_iter = sorted(callbacks_before_iter_set, key=attrgetter('order'))
     callbacks_after_iter = sorted(callbacks_after_iter_set, key=attrgetter('order'))
 
-    # construct boosters
+    #construct boosters
     rum_booster = RUMBooster()
-    reduced_valid_sets, name_valid_sets, is_valid_contain_train, train_data_name = rum_booster._preprocess_valids(train_set, params, valid_sets)
-    rum_booster.rum_structure = rum_structure
-    rum_booster._preprocess_params(params)
-    rum_booster._preprocess_data(train_set, reduced_valid_sets, return_data=True)
+    reduced_valid_sets, \
+    name_valid_sets, \
+    is_valid_contain_train, \
+    train_data_name = rum_booster._preprocess_valids(train_set, params, valid_sets) #prepare validation sets
+    rum_booster.rum_structure = rum_structure #saving utility structure
+    rum_booster._preprocess_params(params) #preparing J set of parameters
+    rum_booster._preprocess_data(train_set, reduced_valid_sets, return_data=True) #preparing J datasets with relevant features
+    rum_booster._construct_boosters(train_data_name, is_valid_contain_train, name_valid_sets) #building boosters with corresponding params and dataset
 
-    rum_booster._construct_boosters(train_data_name, is_valid_contain_train, name_valid_sets)
-
-    # start training
-    # this is probably most the work - need to set up custom objective function and evaluation function
-    # fobj will need to have access to the current utility values for each class
-    
+    #initial prediction for first iteration
     rum_booster._preds = rum_booster._inner_predict()
+
+    #start training
     for i in range(init_iteration, init_iteration + num_boost_round):
+        #initialising early stopping criterion
         early_stop_crit_all = [False] * params['num_classes']
+        #updating all binary boosters of the rum_booster
         for j, booster in enumerate(rum_booster.boosters):
             for cb in callbacks_before_iter:
                 cb(callback.CallbackEnv(model=booster,
@@ -789,13 +898,12 @@ def rum_train(
                                         end_iteration=init_iteration + num_boost_round,
                                         evaluation_result_list=None))       
     
-            #grad, hess = f_obj(preds_j, train_set_j[j])
-            #print(booster)
-            #booster.__boost(grad, hess)
+            #update booster with custom binary objective function, and relevant features
             rum_booster._current_j = j
             booster.update(train_set=rum_booster.train_set[j], fobj=rum_booster.f_obj)
+            
+            # check evaluation result. (from lightGBM initial code, check on all J binary boosters)
             evaluation_result_list = []
-            # check evaluation result.
             if valid_sets is not None:
                 if is_valid_contain_train:
                     evaluation_result_list.extend(booster.eval_train(feval))
@@ -812,25 +920,27 @@ def rum_train(
                 early_stop_crit_all[j] = True
                 booster.best_iteration = earlyStopException.best_iteration + 1
                 evaluation_result_list = earlyStopException.best_score
-                #break
+
+        #make predictions after boosting round to compute new cross entropy and for next iteration grad and hess
         rum_booster._preds = rum_booster._inner_predict()
 
-        #does not support cv, to implement
+        #compute cross validation on training or validation test
         if valid_sets is not None:
             if is_valid_contain_train:
-                cross_entropy = rum_booster.cross_entropy(rum_booster._preds, train_set)
+                cross_entropy = rum_booster.cross_entropy(rum_booster._preds, train_set.get_label().astype(int))
             else:
                 for valid_set_J in rum_booster.valid_sets:
                     preds_valid = rum_booster._inner_predict(valid_set_J)
-                    cross_entropy = rum_booster.cross_entropy(preds_valid, valid_set_J[0])
+                    cross_entropy = rum_booster.cross_entropy(preds_valid, valid_set_J[0].get_label().astype(int))
         
-        if cross_entropy < rum_booster.best_score:
-            rum_booster.best_score = cross_entropy
-            rum_booster.best_iteration = i+1
+            if cross_entropy < rum_booster.best_score:
+                rum_booster.best_score = cross_entropy
+                rum_booster.best_iteration = i+1
         
-        if params['verbosity'] >= 1:
-            print('[{}] -- Logloss value: {}'.format(i + 1, cross_entropy))
-    #to implement
+            if params['verbosity'] >= 1:
+                print('[{}] -- Logloss value: {}'.format(i + 1, cross_entropy))
+        
+        #early stopping if early stopping criterion in all boosters
         if np.sum(early_stop_crit_all) == params['num_classes']:
             break
 
@@ -1179,7 +1289,7 @@ def rum_cv(params, train_set, num_boost_round=100,
             for valid_set in valid_sets:
                 preds_valid = rumbooster._inner_predict(data = valid_set)
                 raw_results.append(preds_valid)
-                cross_ent.append(rumbooster.cross_entropy(preds_valid, valid_set[0]))
+                cross_ent.append(rumbooster.cross_entropy(preds_valid, valid_set[0].get_label().astype(int)))
 
         results[f'Cross entropy --- mean'].append(np.mean(cross_ent))
         results[f'Cross entropy --- stdv'].append(np.std(cross_ent))

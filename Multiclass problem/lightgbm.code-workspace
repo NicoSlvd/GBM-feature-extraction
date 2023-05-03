@@ -2,12 +2,6 @@
 	"folders": [
 		{
 			"path": "."
-		},
-		{
-			"path": "../Binary problem"
-		},
-		{
-			"path": "../../../../../anaconda3/envs/lightgbm/Lib/site-packages/lightgbm"
 		}
 	],
 	"settings": {},
