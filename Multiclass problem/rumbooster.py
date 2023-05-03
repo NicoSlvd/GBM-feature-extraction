@@ -1055,6 +1055,7 @@ def _make_n_folds(full_data, folds, nfold, params, seed, fpreproc=None, stratifi
             train_set, valid_set, tparam = fpreproc(train_set, valid_set, params.copy())
         else:
             tparam = params
+        #create RUMBoosters with corresponding training, validation, and parameters sets
         cvbooster = RUMBooster()
         cvbooster.rum_structure = rum_structure
         reduced_valid_sets, name_valid_sets, is_valid_contain_train, train_data_name = cvbooster._preprocess_valids(train_set, params, valid_set)
@@ -1201,6 +1202,14 @@ def rum_cv(params, train_set, num_boost_round=100,
         The score of the metric is calculated again after each training step, so there is some impact on performance.
     return_cvbooster : bool, optional (default=False)
         Whether to return Booster models trained on each fold through ``CVBooster``.
+    rum_structure : dict, optional (default=None)
+        List of dictionaries specifying the RUM structure. 
+        The list must contain one dictionary for each class, which describes the 
+        utility structure for that class. 
+        Each dictionary has three allowed keys. 
+            'cols': list of columns included in that class
+            'monotone_constraints': list of monotonic constraints on parameters
+            'interaction_constraints': list of interaction constraints on features
 
     Returns
     -------
@@ -1284,8 +1293,9 @@ def rum_cv(params, train_set, num_boost_round=100,
     for i in range(num_boost_round):
         cross_ent = []
         raw_results = []
+        #train all rumboosters
         for rumbooster in cvfolds.rumboosters:
-            preds = rumbooster._inner_predict()
+            rumbooster._preds = rumbooster._inner_predict()
             for j, booster in enumerate(rumbooster.boosters):
                 for cb in callbacks_before_iter:
                     cb(callback.CallbackEnv(model=booster,
@@ -1294,8 +1304,8 @@ def rum_cv(params, train_set, num_boost_round=100,
                                             begin_iteration=0,
                                             end_iteration=num_boost_round,
                                             evaluation_result_list=None))
-                preds_J = preds.T[j]
-                booster.update(train_set = rumbooster.train_set[j], fobj=self.f_obj, preds = preds_J)
+                rumbooster._current_j = j
+                booster.update(train_set = rumbooster.train_set[j], fobj=rumbooster.f_obj)
 
             valid_sets = rumbooster.valid_sets
             for valid_set in valid_sets:
