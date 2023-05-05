@@ -5,7 +5,7 @@ from rumbooster import rum_train, rum_cv
 
 from sklearn.model_selection import train_test_split
 
-swissmetro = pd.read_table('Data/swissmetro.dat')
+'''swissmetro = pd.read_table('Data/swissmetro.dat')
 
 keep = (( swissmetro['PURPOSE'] != 1 ) * ( swissmetro['PURPOSE'] != 3 ) + ( swissmetro['CHOICE'] == 0 )) == 0
 #swissmetro.drop(swissmetro[exclude].index, inplace=True).reset_index(inplace=True, drop=True)
@@ -48,7 +48,7 @@ rum_structure_1= [{'columns': ['TRAIN_TT', 'TRAIN_CO', 'TRAIN_HE'],
                   'interaction_constraints': [0, 1, 2]},
                  {'columns': ['CAR_TT', 'CAR_CO'], 
                   'monotone_constraints': [-1, -1],
-                  'interaction_constraints': [0, 1]}]
+                  'interaction_constraints': [0, 1]}]'''
 
 #lightgbm_1 = rum_train(param, train_data, rum_structure=rum_structure_1)
 '''lightgbm_cv = rum_cv(param, train_data, num_boost_round=10,
@@ -92,37 +92,48 @@ y_train = y_train.drop(columns=['survey_year'])
 y_validate = y_validate.drop(columns=['survey_year'])
 
 param_ld = {'max_depth': 1, 
-         'num_boost_round': 150, 
+         'num_boost_round': 450, 
          'objective':'multiclass',
          'monotone_constraints': [-1, -1, -1, -1, -1, -1], 
          'interaction_constraints': [[0], [1], [2], [3], [4], [5]],
-         'learning_rate': 0.3,
+         'learning_rate': 0.1,
          'verbosity': 2,
-         'num_classes': 4
+         'num_classes': 4,
+         'early_stopping_rounds'
         }
 
 train_data = lgb.Dataset(X_train, label=y_train, free_raw_data=False)
 validation_data = lgb.Dataset(X_validate, label=y_validate, reference= train_data, free_raw_data=False)
 
-rum_structure_ld= [{'columns': ['dur_driving', 'cost_driving_total'], 
-                  'monotone_constraints': [-1, -1], 
-                  'interaction_constraints': [[0, 1]]}, 
-                 {'columns': [ 'dur_pt_total', 'cost_transit'], 
-                  'monotone_constraints': [-1, -1], 
-                  'interaction_constraints': [[0, 1]]},
-                 {'columns': ['dur_cycling'], 
-                  'monotone_constraints': [-1], 
-                  'interaction_constraints': [[0]]},
-                 {'columns': ['dur_walking'], 
-                  'monotone_constraints': [-1], 
-                  'interaction_constraints': [[0]]}]
+rum_structure_ld= [{'columns': ['dur_driving', 'cost_driving_total', 'dur_pt_total', 'cost_transit', 'dur_cycling', 'dur_walking'], 
+                  'monotone_constraints': [0, 0, 0, 0, 0, 0], 
+                  'interaction_constraints': [[0, 1, 2, 3, 4, 5]]}, 
+                 {'columns': ['dur_driving', 'cost_driving_total', 'dur_pt_total', 'cost_transit', 'dur_cycling', 'dur_walking'], 
+                  'monotone_constraints': [0, 0, 0, 0, 0, 0], 
+                  'interaction_constraints': [[0, 1, 2, 3, 4, 5]]},
+                 {'columns': ['dur_driving', 'cost_driving_total', 'dur_pt_total', 'cost_transit', 'dur_cycling', 'dur_walking'], 
+                  'monotone_constraints': [0, 0, 0, 0, 0, 0], 
+                  'interaction_constraints': [[0, 1, 2, 3, 4, 5]]},
+                 {'columns': ['dur_driving', 'cost_driving_total', 'dur_pt_total', 'cost_transit', 'dur_cycling', 'dur_walking'], 
+                  'monotone_constraints': [0, 0, 0, 0, 0, 0], 
+                  'interaction_constraints': [[0, 1, 2, 3, 4, 5]]}]
 
 lightgbm_ld = rum_train(param_ld, train_data, valid_sets=[validation_data], rum_structure= rum_structure_ld)
 
-dict_labels = {'cost_driving_total': 'gbp', 
+'''dict_labels = {'cost_driving_total': 'gbp', 
                'dur_driving':'min', 
                'cost_transit':'gbp', 
                'dur_pt_total':'min', 
                'dur_cycling':'min', 
                'dur_walking':'min'}
-lightgbm_ld.plot_parameters(param_ld, X_train, dict_labels)
+#lightgbm_ld.plot_parameters(param_ld, X_train, dict_labels)'''
+
+param_unc = {'max_depth': 1, 
+         'num_boost_round': 450, 
+         'objective':'multiclass',
+         'learning_rate': 0.1,
+         'verbosity': 2,
+         'num_classes': 4
+        }
+
+lightgbm_1_unc = lgb.train(param_unc, train_data, valid_sets=[validation_data])

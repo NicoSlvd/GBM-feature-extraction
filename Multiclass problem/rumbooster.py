@@ -582,7 +582,7 @@ class RUMBooster:
         sns.set_theme()
         
         #for all features parameters
-        for i, f in enumerate(X.columns):
+        for i, f in enumerate(weights_arranged):
             
             #create nonlinear plot
             x, non_lin_func = self.non_lin_function(weights_arranged[f], 0, 1.1*max(X[f]), 1000)
@@ -594,7 +594,7 @@ class RUMBooster:
             sns.lineplot(x=x, y=non_lin_func_with_lr, lw=2)
             plt.title('Influence of {} on the predictive function (utility)'.format(f), fontdict={'fontsize':  16})
             plt.xlabel('{} [{}]'.format(f, units[f]))
-            plt.ylabel('Utility')          
+            plt.ylabel('Utility')
 
             #plot unconstrained model parameters
             if model_unconstrained is not None:
