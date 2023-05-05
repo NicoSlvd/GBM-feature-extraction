@@ -263,7 +263,10 @@ class RUMBooster:
                 if 'columns' in struct:
                     train_set_j_data = data.get_data()[struct['columns']] #only relevant features for the j booster
                     new_label = np.array([1 if l == j else 0 for l in data.get_label()]) #new binary label
-                    train_set_j = Dataset(train_set_j_data, label=new_label, free_raw_data=False)
+                    if self.with_linear_trees:
+                        train_set_j = Dataset(train_set_j_data, label=new_label, free_raw_data=False, params={'linear_trees':True})
+                    else:
+                        train_set_j = Dataset(train_set_j_data, label=new_label, free_raw_data=False)
                     train_set_j.construct()
                     if reduced_valid_set is not None:
                         reduced_valid_sets_j = []
@@ -299,6 +302,10 @@ class RUMBooster:
             params_j = copy.deepcopy(params)
             params_j['objective'] = 'binary'
             params_j['num_classes'] = 1
+            if 'linear_tree' in params_j:
+                self.with_linear_trees = params_j.pop('linear_tree')
+            else:
+                self.with_linear_trees = False
             if struct:
                 if 'monotone_constraints' in struct:
                     params_j['monotone_constraints'] = struct['monotone_constraints']
@@ -406,9 +413,13 @@ class RUMBooster:
     def __setstate__(self, state: Dict[str, Any]) -> None:
         vars(self).update(state)
 
-    def getweights(self):
+    def getweights(self, model = None):
         """
         get leaf values from a RUMBooster or LightGBM model
+
+        Parameters
+        ----------
+        model: lightGBM model
 
         Returns
         -------
@@ -416,7 +427,12 @@ class RUMBooster:
             DataFrame containing all split points and their corresponding left and right leaves value, 
             for all features
         """
-        model_json = self.dump_model()
+        #using self object or a given model
+        if model is None:
+            model_json = self.dump_model()
+        else:
+            model_json = [model.dump_model()]
+
         weights = []
 
         for b in model_json:
@@ -431,17 +447,25 @@ class RUMBooster:
         weights_df = pd.DataFrame(weights, columns= ['Feature', 'Split point', 'Left leaf value', 'Right leaf value'])
         return weights_df
 
-    def weights_to_plot(self):
+    def weights_to_plot(self, model = None):
         """
         Arrange weights by ascending splitting points and cumulative sum of weights
+
+        Parameters
+        ----------
+        model: lightGBM model
 
         Returns
         -------
         weights_for_plot: dict
             Dictionary containing splitting points and corresponding cumulative weights value for all features
         """
+
         #get raw weights
-        weights = self.getweights()
+        if model is None:
+            weights = self.getweights()
+        else:
+            weights = self.getweights(model=model)
 
         weights_for_plot = {}
         #for all features
@@ -464,7 +488,7 @@ class RUMBooster:
                     #add right leaf value to the current right side value
                     function_value[-1] += float(ordered_data.loc[i, 'Right leaf value'])
                     #add left leaf value to all other current left leaf values
-                    function_value[:-2] = [h + float(ordered_data.loc[i, 'Left leaf value']) for h in function_value[:-2]]
+                    function_value[:-1] = [h + float(ordered_data.loc[i, 'Left leaf value']) for h in function_value[:-1]]
                     
             weights_for_plot[f] = {'Splitting points': split_points,
                                    'Histogram values': function_value}
@@ -523,6 +547,9 @@ class RUMBooster:
             Dictionary containing parameters used to train the RUM booster.
         X : pandas dataframe
             Features used to train the model, in a pandas dataframe.
+        units : dict
+            Dictionary mapping feature names to their units. Key should be exactly the same name as 
+            the corresponding feature name in X.
         Betas : list, optional (default = None)
             List of beta parameters value from a RUM. They should be listed in the same order as 
             in the RUMBooster model.
@@ -540,37 +567,22 @@ class RUMBooster:
         else:
             lr = 0.3
         
-        #if params['lambda'] is None:
-        #    raise Exception('L1 and L2 regularization are not supported, please set alpha and lambda to 0 in the classifier')
-        #elif params['alpha'] is None:
-        #    raise Exception('L1 and L2 regularization are not supported, please set alpha and lambda to 0 in the classifier')
-        #elif (float(params['alpha']) + float(params['lambda'])) != 0:
-        #    raise Exception('L1 and L2 regularization are not supported, please set alpha and lambda to 0 in the classifier')
         if model_unconstrained is not None:
             if params_unc['learning_rate'] is not None:
                 lr_unc = float(params_unc['learning_rate'])
             else:
                 lr_unc = 0.3
         
-        #if params_unc['lambda'] is None:
-        #    raise Exception('L1 and L2 regularization are not supported, please set alpha and lambda to 0 in the classifier')
-        #elif params_unc['alpha'] is None:
-        #    raise Exception('L1 and L2 regularization are not supported, please set alpha and lambda to 0 in the classifier')
-        #elif (float(params_unc['alpha']) + float(params_unc['lambda'])) != 0:
-        #    raise Exception('L1 and L2 regularization are not supported, please set alpha and lambda to 0 in the classifier')
-        
         #get and prepare weights
-        weights = self.getweights()
-
         weights_arranged = self.weights_to_plot()
         
         if model_unconstrained is not None:
-            weights_arranged_unc = self.weights_to_plot()
+            weights_arranged_unc = self.weights_to_plot(model=model_unconstrained)
 
         sns.set_theme()
         
         #for all features parameters
-        for i, f in enumerate(weights.Feature.unique()):
+        for i, f in enumerate(X.columns):
             
             #create nonlinear plot
             x, non_lin_func = self.non_lin_function(weights_arranged[f], 0, 1.1*max(X[f]), 1000)
@@ -581,12 +593,12 @@ class RUMBooster:
             plt.figure(figsize=(10, 6))
             sns.lineplot(x=x, y=non_lin_func_with_lr, lw=2)
             plt.title('Influence of {} on the predictive function (utility)'.format(f), fontdict={'fontsize':  16})
-            plt.xlabel('{} [{}]'.format(f, units[i]))
+            plt.xlabel('{} [{}]'.format(f, units[f]))
             plt.ylabel('Utility')          
 
             #plot unconstrained model parameters
             if model_unconstrained is not None:
-                _, non_lin_func_unc = self.non_lin_func(weights_arranged_unc[f], 0, 1.1*max(X[f]), 1000)
+                _, non_lin_func_unc = self.non_lin_function(weights_arranged_unc[f], 0, 1.1*max(X[f]), 1000)
                 non_lin_func_with_lr_unc =  [h_unc/lr_unc for h_unc in non_lin_func_unc]
                 sns.lineplot(x=x, y=non_lin_func_with_lr_unc, lw=2)      
             
@@ -813,7 +825,6 @@ def rum_train(
         The trained RUMBooster model.
     """
     # create predictor first
-    start_time = time.time()
     params = copy.deepcopy(params)
     params = _choose_param_value(
         main_param_name='objective',
