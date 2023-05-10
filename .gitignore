@@ -1,6 +1,8 @@
 *.pickle
 *.html
 *.iter
+*.Toml
 .ipynb_checkpoints/
 __pycache__/
 abstract.txt
+Trash/
