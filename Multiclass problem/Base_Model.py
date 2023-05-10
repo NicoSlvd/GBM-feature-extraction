@@ -13,8 +13,6 @@ from sklearn.model_selection import train_test_split
 df = pd.read_csv("Data/swissmetro.dat", sep = '\t')
 database = db.Database("swissmetro", df)
 
-globals().update(database.variables)
-
 # Exclude data
 exclude = (( PURPOSE != 1 ) * ( PURPOSE != 3 ) + ( CHOICE == 0 )) > 0
 database.remove(exclude)
