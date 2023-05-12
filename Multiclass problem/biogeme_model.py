@@ -3,7 +3,6 @@ import biogeme.database as db
 import biogeme.biogeme as bio
 from biogeme.expressions import Beta, DefineVariable
 from biogeme.models import loglogit
-import biogeme.models as models
 from sklearn.model_selection import train_test_split
 
 def estimate_model(model, return_params = False):

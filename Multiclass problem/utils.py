@@ -1,93 +1,58 @@
 import pandas as pd
+import numpy as np
+import random
+from collections import Counter, defaultdict
 from sklearn.model_selection import train_test_split
 import biogeme.database as db
 
 from biogeme_model import SwissMetro, estimate_model
 from biogeme_to_rumbooster import bio_rum_train
 
-def load_prep_data(data_name = None, train_split = False, split_perc = 0.2, seed = 42):
-    '''
-    load dataset with specified name from the Data folder and split it for training if specified.
 
-    Parameters
-    ----------
+# Sample a dataset grouped by `groups` and stratified by `y`
+# Source: https://www.kaggle.com/jakubwasikowski/stratified-group-k-fold-cross-validation
+def stratified_group_k_fold(X, y, groups, k, seed=None):
+    labels_num = np.max(y) + 1
+    y_counts_per_group = defaultdict(lambda: np.zeros(labels_num))
+    y_distr = Counter()
+    for label, g in zip(y, groups):
+        y_counts_per_group[g][label] += 1
+        y_distr[label] += 1
 
-    data_name: str
-        Full name of the dataset, with the extension
-    train_split: bool (default = False)
-        If true, the dataset will be split according to split_perc 
-    split_perc: float (default = 0.2)
-        Size of the validation sample
-    seed: int (default = 42)
-        Seed of the random generator for reproducibility
+    y_counts_per_fold = defaultdict(lambda: np.zeros(labels_num))
+    groups_per_fold = defaultdict(set)
 
-    Return
-    ------
-    df or df_train, df_test: DataFrame
-        dataset, splitted or not, ready for training
-    '''
-    #load data
-    if '.dat' in data_name:
-        df = pd.read_csv('Data/'+data_name, sep='\t')
-    elif '.csv' in data_name:
-        df = pd.read_csv('Data/'+data_name)
-    else:
-        raise ValueError('Dataset without .dat or .csv extensions are not supported')
+    def eval_y_counts_per_fold(y_counts, fold):
+        y_counts_per_fold[fold] += y_counts
+        std_per_label = []
+        for label in range(labels_num):
+            label_std = np.std([y_counts_per_fold[i][label] / y_distr[label] for i in range(k)])
+            std_per_label.append(label_std)
+        y_counts_per_fold[fold] -= y_counts
+        return np.mean(std_per_label)
     
-    if 'swissmetro' in data_name:
-        #keep relevant data for swissmetro
-        keep = ((df['PURPOSE']!=1)*(df['PURPOSE']!=3)+(df['CHOICE']==0)) == 0
-        df = df[keep]
+    groups_and_y_counts = list(y_counts_per_group.items())
+    random.Random(seed).shuffle(groups_and_y_counts)
 
-    #split data if necessary
-    if train_split:
-        return train_test_split(df, test_size=split_perc, random_state=seed)
-    else:
-        return df
-    
-def compare_models(dataset_names):
-    '''
-    compare one or several models estimated through biogeme and trained through GBRU, by calculating
-    the cross-entropy on the train set.
+    for g, y_counts in sorted(groups_and_y_counts, key=lambda x: -np.std(x[1])):
+        best_fold = None
+        min_eval = None
+        for i in range(k):
+            fold_eval = eval_y_counts_per_fold(y_counts, i)
+            if min_eval is None or fold_eval < min_eval:
+                min_eval = fold_eval
+                best_fold = i
+        y_counts_per_fold[best_fold] += y_counts
+        groups_per_fold[best_fold].add(g)
 
-    ----------
-    parameters
+    all_groups = set(groups)
+    for i in range(k):
+        train_groups = all_groups - groups_per_fold[i]
+        test_groups = groups_per_fold[i]
 
-    dataset_name: list(str)
-        list of dataset names (as str)
-    '''
+        train_indices = [i for i, g in enumerate(groups) if g in train_groups]
+        test_indices = [i for i, g in enumerate(groups) if g in test_groups]
 
-    for dataset in dataset_names:
-        data_train, _ = load_prep_data(dataset, train_split=True)
-        if 'swissmetro' in dataset:
-            model = SwissMetro(data_train)
-            param = {'max_depth': 1, 
-                     'num_boost_round': 300, 
-                     'objective':'multiclass',
-                     'monotone_constraints': [-1, -1, -1, -1, -1, -1, -1, -1], 
-                     'interaction_constraints': [[0], [1], [2], [3], [4], [5], [6], [7]],
-                     'learning_rate': 0.2,
-                     'verbosity': 2,
-                     'num_classes': 3
-                    }
-        elif 'london' in dataset:
-            #model = London(data_train)
-            param = {'max_depth': 3, 
-                     'num_boost_round': 300, 
-                     'objective':'multiclass',
-                     'monotone_constraints': [-1, -1, -1, -1, -1, -1], 
-                     'interaction_constraints': [[0], [1], [2], [3], [4], [5]],
-                     'learning_rate': 0.2,
-                     'verbosity': 2,
-                     'num_classes': 4
-                    }
-        else:
-            raise ValueError('This dataset is not implemented yet')
-        
-        bio_model = estimate_model(model)
+        yield train_indices, test_indices
 
-        gbru_model = bio_rum_train(model, param)
-
-        print('On {}, biogeme has a CE of: {}'.format(dataset, bio_model))
-        print('On {}, GBRU has a CE of: {}'.format(dataset, gbru_model))
-        
+#def utility_to_pwlin()

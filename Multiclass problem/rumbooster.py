@@ -135,7 +135,7 @@ class RUMBooster:
         U = []
         
         #separate features in J corresponding datasets
-        new_data, _ = self._preprocess_data(data)
+        new_data, _ = self._preprocess_data(data, return_data=True)
         
         #compute utilities with corresponding features
         for k, booster in enumerate(self.boosters):
@@ -257,7 +257,6 @@ class RUMBooster:
 
         #to access data
         data.construct()
-
         for j, struct in enumerate(self.rum_structure):
             if struct:
                 if 'columns' in struct:
@@ -385,6 +384,7 @@ class RUMBooster:
     def _from_dict(self, models: Dict[str, Any]) -> None:
         """Load RUMBooster from dict."""
         self.best_iteration = models["best_iteration"]
+        self.best_score = models["best_score"]
         self.boosters = []
         for model_str in models["boosters"]:
             self._append(Booster(model_str=model_str))
@@ -395,7 +395,7 @@ class RUMBooster:
         for booster in self.boosters:
             models_str.append(booster.model_to_string(num_iteration=num_iteration, start_iteration=start_iteration,
                                                       importance_type=importance_type))
-        return {"boosters": models_str, "best_iteration": self.best_iteration}
+        return {"boosters": models_str, "best_iteration": self.best_iteration, "best_score": self.best_score}
 
     def __getattr__(self, name: str) -> Callable[[Any, Any], List[Any]]:
         """Redirect methods call of RUMBooster."""
@@ -636,6 +636,19 @@ class RUMBooster:
                         
             plt.show()
 
+    def plot_util(j, f, F, start, stop, points=10000):
+        xi=[]
+        for i in range(F[j]):
+            if i == f:
+                xi.append(np.linspace(start,stop,points))
+            else:
+                xi.append(np.zeros(points))
+        xin = np.array(xi).T
+        booster = self.boosters[j]
+        ypred = booster.predict(xin)
+        
+        plt.plot(np.linspace(start,stop,points), ypred)
+
     def model_from_string(self, model_str: str):
         """Load RUMBooster from a string.
 
@@ -875,18 +888,18 @@ def rum_train(
             cb.__dict__.setdefault('order', i - len(callbacks))
         callbacks_set = set(callbacks)
 
-    if "early_stopping_round" in params:
-        callbacks_set.add(
-            callback.early_stopping(
-                stopping_rounds=params["early_stopping_round"],
-                first_metric_only=first_metric_only,
-                verbose=_choose_param_value(
-                    main_param_name="verbosity",
-                    params=params,
-                    default_value=1
-                ).pop("verbosity") > 0
-            )
-        )
+    #if "early_stopping_round" in params:
+    #    callbacks_set.add(
+    #        callback.early_stopping(
+    #            stopping_rounds=params["early_stopping_round"],
+    #            first_metric_only=first_metric_only,
+    #            verbose=_choose_param_value(
+    #                main_param_name="verbosity",
+    #                params=params,
+    #                default_value=1
+    #            ).pop("verbosity") > 0
+    #        )
+    #    )
 
     callbacks_before_iter_set = {cb for cb in callbacks_set if getattr(cb, 'before_iteration', False)}
     callbacks_after_iter_set = callbacks_set - callbacks_before_iter_set
@@ -960,11 +973,12 @@ def rum_train(
                 rum_booster.best_score = cross_entropy
                 rum_booster.best_iteration = i+1
         
-            if params['verbosity'] >= 1:
+            if (params['verbosity'] >= 1) and (i % 10 == 0):
                 print('[{}] -- Logloss value: {}'.format(i + 1, cross_entropy))
         
         #early stopping if early stopping criterion in all boosters
-        if np.sum(early_stop_crit_all) == params['num_classes']:
+        if rum_booster.best_iteration + params["early_stopping_round"] < i + 2:
+            print('Early stopping at iteration {}, with a best score of {}'.format(rum_booster.best_iteration, rum_booster.best_score))
             break
 
     for booster in rum_booster.boosters:
@@ -997,6 +1011,7 @@ class CVRUMBooster:
         """
         self.rumboosters = []
         self.best_iteration = -1
+        self.best_score = 100000
 
     def _append(self, rum_booster):
         """Add a booster to CVBooster."""
@@ -1326,8 +1341,18 @@ def rum_cv(params, train_set, num_boost_round=100,
 
         results[f'Cross entropy --- mean'].append(np.mean(cross_ent))
         results[f'Cross entropy --- stdv'].append(np.std(cross_ent))
-        if verbose_eval is True:
+        if verbose_eval and i % 10 == 0:
             print('[{}] -- Cross entropy mean: {}, with std: {}'.format(i + 1, np.mean(cross_ent), np.std(cross_ent)))
+        
+        if np.mean(cross_ent) < cvfolds.best_score:
+            cvfolds.best_score = np.mean(cross_ent)
+            cvfolds.best_iteration = i + 1 
+
+        if early_stopping_rounds is not None and cvfolds.best_iteration + early_stopping_rounds < i+2:
+            print('Early stopping at iteration {} with a cross entropy best score of {}'.format(cvfolds.best_iteration,cvfolds.best_score))
+            for k in results:
+                results[k] = results[k][:cvfolds.best_iteration]
+            break
         #res = _agg_cv_result(raw_results, eval_train_metric)
         #try:
         #    for cb in callbacks_after_iter:

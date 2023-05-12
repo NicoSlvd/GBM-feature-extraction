@@ -5,7 +5,7 @@ from rumbooster import rum_train, rum_cv
 
 from sklearn.model_selection import train_test_split
 
-'''swissmetro = pd.read_table('Data/swissmetro.dat')
+swissmetro = pd.read_table('Data/swissmetro.dat')
 
 keep = (( swissmetro['PURPOSE'] != 1 ) * ( swissmetro['PURPOSE'] != 3 ) + ( swissmetro['CHOICE'] == 0 )) == 0
 #swissmetro.drop(swissmetro[exclude].index, inplace=True).reset_index(inplace=True, drop=True)
@@ -48,21 +48,23 @@ rum_structure_1= [{'columns': ['TRAIN_TT', 'TRAIN_CO', 'TRAIN_HE'],
                   'interaction_constraints': [0, 1, 2]},
                  {'columns': ['CAR_TT', 'CAR_CO'], 
                   'monotone_constraints': [-1, -1],
-                  'interaction_constraints': [0, 1]}]'''
+                  'interaction_constraints': [0, 1]}]
 
 #lightgbm_1 = rum_train(param, train_data, rum_structure=rum_structure_1)
-'''lightgbm_cv = rum_cv(param, train_data, num_boost_round=10,
+lightgbm_cv = rum_cv(param, train_data, num_boost_round=10,
                      folds=None, nfold=5, stratified=True, shuffle=True,
                      metrics=None, fobj=None, feval=None, init_model=None,
                      feature_name='auto', categorical_feature='auto',
                      early_stopping_rounds=None, fpreproc=None,
                      verbose_eval=True, show_stdv=True, seed=0,
                      callbacks=None, eval_train_metric=False,
-                     return_cvbooster=False, rum_structure=rum_structure_1)'''
-                     
+                     return_cvbooster=True, rum_structure=rum_structure_1)
+
+
+a = 1                    
 #lightgbm_1 = rum_train(param, train_data, rum_structure= rum_structure_1)
 
-london_data = pd.read_csv("../Binary problem/Data/dataset_london.csv")
+'''london_data = pd.read_csv("../Binary problem/Data/dataset_london.csv")
 
 london_with_driving_lic = london_data[london_data['driving_license']==1]
 
@@ -120,13 +122,13 @@ rum_structure_ld= [{'columns': ['dur_driving', 'cost_driving_total', 'dur_pt_tot
 
 lightgbm_ld = rum_train(param_ld, train_data, valid_sets=[validation_data], rum_structure= rum_structure_ld)
 
-'''dict_labels = {'cost_driving_total': 'gbp', 
+dict_labels = {'cost_driving_total': 'gbp', 
                'dur_driving':'min', 
                'cost_transit':'gbp', 
                'dur_pt_total':'min', 
                'dur_cycling':'min', 
                'dur_walking':'min'}
-#lightgbm_ld.plot_parameters(param_ld, X_train, dict_labels)'''
+#lightgbm_ld.plot_parameters(param_ld, X_train, dict_labels)
 
 param_unc = {'max_depth': 1, 
          'num_boost_round': 450, 
@@ -136,4 +138,4 @@ param_unc = {'max_depth': 1,
          'num_classes': 4
         }
 
-lightgbm_1_unc = lgb.train(param_unc, train_data, valid_sets=[validation_data])
+lightgbm_1_unc = lgb.train(param_unc, train_data, valid_sets=[validation_data])'''
