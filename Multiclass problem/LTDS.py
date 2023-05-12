@@ -20,7 +20,7 @@ class ltds():
 
     def __init__(self, model_file = None):
         '''
-        Class for the model related to swissmetro
+        Class for the model related to LTDS
 
         ----------
         parameters
@@ -58,6 +58,7 @@ class ltds():
         '''
         Load and preprocess data
         '''
+        #source: https://github.com/JoseAngelMartinB/prediction-behavioural-analysis-ml-travel-mode-choice
         data_train = pd.read_csv(self.dataset_path_train)
         data_test = pd.read_csv(self.dataset_path_test)
 
@@ -84,7 +85,8 @@ class ltds():
 
     def _model(self):
         '''
-        Create a MNL on the swissmetro dataset
+        Create a MNL on the LTDS dataset
+        Source of the model: https://github.com/JoseAngelMartinB/prediction-behavioural-analysis-ml-travel-mode-choice
         '''
         database_train = db.Database('LTDS_train', self.dataset_train)
 
