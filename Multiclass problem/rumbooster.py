@@ -593,7 +593,8 @@ class RUMBooster:
             plt.figure(figsize=(10, 6))
             sns.lineplot(x=x, y=non_lin_func_with_lr, lw=2)
             plt.title('Influence of {} on the predictive function (utility)'.format(f), fontdict={'fontsize':  16})
-            plt.xlabel('{} [{}]'.format(f, units[f]))
+            #plt.xlabel('{} [{}]'.format(f, units[f]))
+            plt.xlabel('{}'.format(f))
             plt.ylabel('Utility')
 
             #plot unconstrained model parameters

@@ -54,5 +54,3 @@ def stratified_group_k_fold(X, y, groups, k, seed=None):
         test_indices = [i for i, g in enumerate(groups) if g in test_groups]
 
         yield train_indices, test_indices
-
-#def utility_to_pwlin()

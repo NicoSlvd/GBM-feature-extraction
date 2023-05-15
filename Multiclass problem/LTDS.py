@@ -51,6 +51,7 @@ class ltds():
             self.gbru_model = RUMBooster(model_file=model_file)
             self.gbru_model.rum_structure = self._bio_to_rumboost()
             self.gbru_cross_entropy = self.gbru_model.best_score
+            self._rum_predict()
 
 
 
@@ -75,7 +76,7 @@ class ltds():
         test_idx = []
         try:
             train_idx, test_idx = pickle.load(open('strat_group_k_fold.pickle', "rb"))
-        except:
+        except FileNotFoundError:
             for (train_i, test_i) in stratified_group_k_fold(data_train[features], data_train['travel_mode'], hh_id, k=5):
                 train_idx.append(train_i)
                 test_idx.append(test_i)
@@ -311,10 +312,6 @@ class ltds():
         test_data.construct()
         self.gbru_cross_entropy_test = self.gbru_model.cross_entropy(self.gbru_prediction,test_data.get_label().astype(int))
 
-    #TO IMPLEMENT
-    #def hyperparameter_search()
-    #add prediction on the test set for both models
-
     def compare_models(self, on_test_set = False):
         '''
         compare one or several models estimated through biogeme and trained through GBRU, by calculating
@@ -332,6 +329,7 @@ class ltds():
                                                                                                  self.gbru_cross_entropy))
 
         if on_test_set:
+            self._rum_predict()
             print('On {}, biogeme has a negative CE of .. and GBRU of {} on the test set'.\
                   format(self.dataset_name,self.gbru_cross_entropy_test))
 
