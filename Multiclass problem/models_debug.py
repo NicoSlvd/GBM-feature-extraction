@@ -1,7 +1,10 @@
 from NTS import nts
-import json
+from LTDS import ltds
+import numpy as np
 
+ltds_model = ltds(model_file='LTDS_gbru_model.json')
 
-nts_model = nts(model_file='nts_gbru_model.json')
+ltds_model.gbru_model.pw_utility(ltds_model.dataset_train, ltds_model.dataset_test)
 
-print(nts_model.gbru_model.plot_parameters(nts_model.params, nts_model.dataset_train, []))
+#print('Best performance of the model with a learning rate of 0.1: \n------GMPCA: {}\n---Accuracy: {}' \
+#      .format(np.exp(-ltds_model.gbru_cross_entropy_test)*100, ltds_model.gbru_accuracy_test*100))

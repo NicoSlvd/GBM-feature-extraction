@@ -3,15 +3,14 @@
 import collections
 import copy
 import json
-import time
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+import numpy as np
+
 from operator import attrgetter
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
-
-import numpy as np
 
 from lightgbm import callback
 from lightgbm.basic import Booster, Dataset, LightGBMError, _ConfigAliases, _InnerPredictor, _choose_param_value, _log_warning
@@ -229,6 +228,55 @@ class RUMBooster:
         exps = np.exp(shiftx)
         return exps / exps.sum(axis=1)[:,None]
     
+    def _stairs_to_pw(self, train_data, test_data):
+        """Transform a stair output to a piecewise linear prediction"""
+        weights = self.weights_to_plot()
+        pw_func = {}
+        for u in weights:
+            pw_func[u] = {}
+            for f in weights[u]:
+                split_points = weights[u][f]['Splitting points']
+                leaf_values = weights[u][f]['Histogram values']
+
+                if len(split_points) < 1:
+                    pw_func[u][f] = weights[u][f]['Histogram values']
+                    break
+                
+                #getting position in the middle of splitting points intervals
+                if len(split_points) > 1:
+                    mid_pos = [(sp2 + sp1)/2 for sp2, sp1 in zip(split_points[:-1], split_points[1:])]
+                else:
+                    mid_pos = []
+                
+                mid_pos.insert(0, min(train_data[f])) #adding first point
+                mid_pos.append(max(train_data[f])) #adding last point
+
+                slope = [(leaf_values[i+1]-leaf_values[i])/(mid_pos[i+1]-mid_pos[i]) for i in range(0, len(mid_pos)-1)]
+                slope.insert(0, 0) #adding first slope
+                slope.append(0) #adding last slope
+
+                conds = [test_data[f]<mp for mp in mid_pos]
+                conds.append(test_data[f] >= mid_pos[-1])
+                values = [lambda x: leaf_values[j] + slope[j+1] * (x - mid_pos[j]) for j in range(0, len(leaf_values))]
+                values.insert(0, leaf_values[0])
+                pw_func[u][f] = np.piecewise(test_data[f], conds, values)
+
+        return pw_func
+
+    def pw_utility(self, data, test_data):
+        '''
+        compute the value of utilities with piece-wise linear approximation
+        '''
+        pw_func = self._stairs_to_pw(data, test_data)
+        print(pw_func)
+
+    def accuracy(self, preds, labels):
+        """
+        compute accuracy of the model
+        """
+        labels_pred = np.argmax(preds, axis=1)
+        return np.mean(labels_pred == labels)
+    
     def cross_entropy(self, preds, labels):
         """
         Compute cross entropy of the RUMBooster model for the given predictions and data
@@ -435,16 +483,16 @@ class RUMBooster:
 
         weights = []
 
-        for b in model_json:
+        for i, b in enumerate(model_json):
             feature_names = b['feature_names']
             for trees in b['tree_info']:
                 feature = feature_names[trees['tree_structure']['split_feature']]
                 split_point = trees['tree_structure']['threshold']
                 left_leaf_value = trees['tree_structure']['left_child']['leaf_value']
                 right_leaf_value = trees['tree_structure']['right_child']['leaf_value']
-                weights.append([feature, split_point, left_leaf_value, right_leaf_value])
+                weights.append([feature, split_point, left_leaf_value, right_leaf_value, i])
 
-        weights_df = pd.DataFrame(weights, columns= ['Feature', 'Split point', 'Left leaf value', 'Right leaf value'])
+        weights_df = pd.DataFrame(weights, columns= ['Feature', 'Split point', 'Left leaf value', 'Right leaf value', 'Utility'])
         return weights_df
 
     def weights_to_plot(self, model = None):
@@ -469,30 +517,36 @@ class RUMBooster:
 
         weights_for_plot = {}
         #for all features
-        for f in weights.Feature.unique():
-            split_points = []
-            function_value = [0]
+        for i in weights.Utility.unique():
+            weights_for_plot[str(i)] = {}
             
-            #sort by ascending order
-            feature_data = weights[weights.Feature == f]
-            ordered_data = feature_data.sort_values(by = ['Split point'], ignore_index = True)
-            for i, s in enumerate(ordered_data['Split point']):
-                #new split point
-                if s not in split_points:
-                    split_points.append(s)
-                    #add a new right leaf value to the current right side value
-                    function_value.append(function_value[-1] + float(ordered_data.loc[i, 'Right leaf value']))
-                    #add left leaf value to all other current left leaf values
-                    function_value[:-1] = [h + float(ordered_data.loc[i, 'Left leaf value']) for h in function_value[:-1]]
-                else:
-                    #add right leaf value to the current right side value
-                    function_value[-1] += float(ordered_data.loc[i, 'Right leaf value'])
-                    #add left leaf value to all other current left leaf values
-                    function_value[:-1] = [h + float(ordered_data.loc[i, 'Left leaf value']) for h in function_value[:-1]]
-                    
-            weights_for_plot[f] = {'Splitting points': split_points,
-                                   'Histogram values': function_value}
-            
+            for f in weights[weights.Utility == i].Feature.unique():
+                split_points = []
+                function_value = [0]
+
+                #getting values related to the corresponding utility
+                weights_util = weights[weights.Utility == i]
+                
+                #sort by ascending order
+                feature_data = weights_util[weights_util.Feature == f]
+                ordered_data = feature_data.sort_values(by = ['Split point'], ignore_index = True)
+                for j, s in enumerate(ordered_data['Split point']):
+                    #new split point
+                    if s not in split_points:
+                        split_points.append(s)
+                        #add a new right leaf value to the current right side value
+                        function_value.append(function_value[-1] + float(ordered_data.loc[j, 'Right leaf value']))
+                        #add left leaf value to all other current left leaf values
+                        function_value[:-1] = [h + float(ordered_data.loc[j, 'Left leaf value']) for h in function_value[:-1]]
+                    else:
+                        #add right leaf value to the current right side value
+                        function_value[-1] += float(ordered_data.loc[j, 'Right leaf value'])
+                        #add left leaf value to all other current left leaf values
+                        function_value[:-1] = [h + float(ordered_data.loc[j, 'Left leaf value']) for h in function_value[:-1]]
+                        
+                weights_for_plot[str(i)][f] = {'Splitting points': split_points,
+                                               'Histogram values': function_value}
+                
         return weights_for_plot
     
     def non_lin_function(self, weights_ordered, x_min, x_max, num_points):
@@ -523,6 +577,11 @@ class RUMBooster:
         nonlin_function = []
         i = 0
         max_i = len(weights_ordered['Splitting points']) #all splitting points
+
+        #handling no split points
+        if max_i == 0:
+            return x_values, float(weights_ordered['Histogram values'][i])*x_values
+
         for x in x_values:
             #compute the value of the function at x according to the weights value in between splitting points
             if x < float(weights_ordered['Splitting points'][i]):
@@ -535,7 +594,7 @@ class RUMBooster:
         
         return x_values, nonlin_function
     
-    def plot_parameters(self, params, X, units, Betas = None , withPointDist = False, model_unconstrained = None, 
+    def plot_parameters(self, params, X, utility_names, Betas = None , withPointDist = False, model_unconstrained = None, 
                         params_unc = None):
         """
         Plot the non linear impact of parameters on the utility function. When specified, unconstrained parameters
@@ -547,9 +606,8 @@ class RUMBooster:
             Dictionary containing parameters used to train the RUM booster.
         X : pandas dataframe
             Features used to train the model, in a pandas dataframe.
-        units : dict
-            Dictionary mapping feature names to their units. Key should be exactly the same name as 
-            the corresponding feature name in X.
+        utility_name : dict
+            Dictionary mapping utilities to their names.
         Betas : list, optional (default = None)
             List of beta parameters value from a RUM. They should be listed in the same order as 
             in the RUMBooster model.
@@ -582,60 +640,71 @@ class RUMBooster:
         sns.set_theme()
         
         #for all features parameters
-        for i, f in enumerate(weights_arranged):
-            
-            #create nonlinear plot
-            x, non_lin_func = self.non_lin_function(weights_arranged[f], 0, 1.1*max(X[f]), 1000)
-            
-            non_lin_func_with_lr = [h/lr for h in non_lin_func]
-            
-            #plot parameters
-            plt.figure(figsize=(10, 6))
-            sns.lineplot(x=x, y=non_lin_func_with_lr, lw=2)
-            plt.title('Influence of {} on the predictive function (utility)'.format(f), fontdict={'fontsize':  16})
-            #plt.xlabel('{} [{}]'.format(f, units[f]))
-            plt.xlabel('{}'.format(f))
-            plt.ylabel('Utility')
+        for u in weights_arranged:
+            for i, f in enumerate(weights_arranged[u]):
+                
+                #create nonlinear plot
+                x, non_lin_func = self.non_lin_function(weights_arranged[u][f], 0, 1.1*max(X[f]), 1000)
+                
+                non_lin_func_with_lr = [h/lr for h in non_lin_func]
+                
+                #plot parameters
+                plt.figure(figsize=(10, 6))
+                sns.lineplot(x=x, y=non_lin_func_with_lr, lw=2)
+                plt.title('Influence of {} on the predictive function (utility)'.format(f), fontdict={'fontsize':  16})
+                #plt.xlabel('{} [{}]'.format(f, units[f]))
+                if 'dur' in f:
+                    plt.xlabel('{} [h]'.format(f))
+                elif 'time' in f:
+                    plt.xlabel('{} [h]'.format(f))
+                elif 'cost' in f:
+                    plt.xlabel('{} [£]'.format(f))
+                elif 'distance' in f:
+                    plt.xlabel('{} [km]'.format(f))
+                else:
+                    plt.xlabel('{}'.format(f))
 
-            #plot unconstrained model parameters
-            if model_unconstrained is not None:
-                _, non_lin_func_unc = self.non_lin_function(weights_arranged_unc[f], 0, 1.1*max(X[f]), 1000)
-                non_lin_func_with_lr_unc =  [h_unc/lr_unc for h_unc in non_lin_func_unc]
-                sns.lineplot(x=x, y=non_lin_func_with_lr_unc, lw=2)      
-            
-            #plot RUM parameters
-            if Betas is not None:
-                sns.lineplot(x=x, y=Betas[i]*x)
-            
-            #plot data distribution
-            if withPointDist:
-                sns.scatterplot(x=x, y=0*x, s=100, alpha=0.1)
-            
-            #legend
-            if Betas is not None:
+                plt.ylabel('{} utility'.format(utility_names[u]))
+
+                #plot unconstrained model parameters
                 if model_unconstrained is not None:
-                    if withPointDist:
-                        plt.legend(labels = ['With GBM constrained', 'With GBM unconstrained', 'With RUM', 'Data'])
+                    _, non_lin_func_unc = self.non_lin_function(weights_arranged_unc[u][f], 0, 1.1*max(X[f]), 1000)
+                    non_lin_func_with_lr_unc =  [h_unc/lr_unc for h_unc in non_lin_func_unc]
+                    sns.lineplot(x=x, y=non_lin_func_with_lr_unc, lw=2)      
+                
+                #plot RUM parameters
+                if Betas is not None:
+                    sns.lineplot(x=x, y=Betas[i]*x)
+                
+                #plot data distribution
+                if withPointDist:
+                    sns.scatterplot(x=x, y=0*x, s=100, alpha=0.1)
+                
+                #legend
+                if Betas is not None:
+                    if model_unconstrained is not None:
+                        if withPointDist:
+                            plt.legend(labels = ['With GBM constrained', 'With GBM unconstrained', 'With RUM', 'Data'])
+                        else:
+                            plt.legend(labels = ['With GBM constrained', 'With GBM unconstrained', 'With RUM'])
                     else:
-                        plt.legend(labels = ['With GBM constrained', 'With GBM unconstrained', 'With RUM'])
+                        if withPointDist:
+                            plt.legend(labels = ['With GBM constrained', 'With RUM', 'Data'])
+                        else:
+                            plt.legend(labels = ['With GBM constrained', 'With RUM'])
                 else:
-                    if withPointDist:
-                        plt.legend(labels = ['With GBM constrained', 'With RUM', 'Data'])
+                    if model_unconstrained is not None:
+                        if withPointDist:
+                            plt.legend(labels = ['With GBM constrained', 'With GBM unconstrained', 'Data'])
+                        else:
+                            plt.legend(labels = ['With GBM constrained', 'With GBM unconstrained'])
                     else:
-                        plt.legend(labels = ['With GBM constrained', 'With RUM'])
-            else:
-                if model_unconstrained is not None:
-                    if withPointDist:
-                        plt.legend(labels = ['With GBM constrained', 'With GBM unconstrained', 'Data'])
-                    else:
-                        plt.legend(labels = ['With GBM constrained', 'With GBM unconstrained'])
-                else:
-                    if withPointDist:
-                        plt.legend(labels = ['With GBM constrained', 'Data'])
-                    else:
-                        plt.legend(labels = ['With GBM constrained'])
-                        
-            plt.show()
+                        if withPointDist:
+                            plt.legend(labels = ['With GBM constrained', 'Data'])
+                        else:
+                            plt.legend(labels = ['With GBM constrained'])
+                            
+                plt.show()
 
     def plot_util(j, f, F, start, stop, points=10000):
         xi=[]
@@ -978,7 +1047,7 @@ def rum_train(
                 print('[{}] -- Logloss value: {}'.format(i + 1, cross_entropy))
         
         #early stopping if early stopping criterion in all boosters
-        if rum_booster.best_iteration + params["early_stopping_round"] < i + 2:
+        if (params["earl_stopping_round"] != 0) and (rum_booster.best_iteration + params["early_stopping_round"] < i + 1):
             print('Early stopping at iteration {}, with a best score of {}'.format(rum_booster.best_iteration, rum_booster.best_score))
             break
 
@@ -1349,7 +1418,7 @@ def rum_cv(params, train_set, num_boost_round=100,
             cvfolds.best_score = np.mean(cross_ent)
             cvfolds.best_iteration = i + 1 
 
-        if early_stopping_rounds is not None and cvfolds.best_iteration + early_stopping_rounds < i+2:
+        if early_stopping_rounds is not None and cvfolds.best_iteration + early_stopping_rounds < i+1:
             print('Early stopping at iteration {} with a cross entropy best score of {}'.format(cvfolds.best_iteration,cvfolds.best_score))
             for k in results:
                 results[k] = results[k][:cvfolds.best_iteration]
