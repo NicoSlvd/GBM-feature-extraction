@@ -97,7 +97,8 @@ class RUMBooster:
         pred_contrib: bool = False,
         data_has_header: bool = False,
         validate_features: bool = False,
-        utilities: bool = False
+        utilities: bool = False,
+        piece_wise: bool = False
     ):
         """Predict logic.
 
@@ -123,7 +124,9 @@ class RUMBooster:
             If True, ensure that the features used to predict match the ones used to train.
             Used only if data is pandas DataFrame.
         utilities : bool, optional (default=True)
-            If True, return raw utilities for each class, without generating probabilities. 
+            If True, return raw utilities for each class, without generating probabilities.
+        piece_wise: bool, optional (default=False)
+            If True, use piece-wise utility instead of stairs utility.
 
         Returns
         -------
@@ -133,19 +136,22 @@ class RUMBooster:
         """
         U = []
         
-        #separate features in J corresponding datasets
-        new_data, _ = self._preprocess_data(data, return_data=True)
-        
         #compute utilities with corresponding features
-        for k, booster in enumerate(self.boosters):
-            U.append(booster.predict(new_data[k].get_data(), 
-                            start_iteration, 
-                            num_iteration, 
-                            raw_score, 
-                            pred_leaf, 
-                            pred_contrib,
-                            data_has_header,
-                            validate_features))
+        if not piece_wise:
+            #separate features in J corresponding datasets
+            new_data, _ = self._preprocess_data(data, return_data=True)
+            for k, booster in enumerate(self.boosters):
+                U.append(booster.predict(new_data[k].get_data(), 
+                                start_iteration, 
+                                num_iteration, 
+                                raw_score, 
+                                pred_leaf, 
+                                pred_contrib,
+                                data_has_header,
+                                validate_features))
+        else:
+            U = self.pw_utility(data.get_data())
+
         preds = np.array(U).T
 
         #softmax
@@ -164,7 +170,8 @@ class RUMBooster:
         pred_contrib: bool = False,
         data_has_header: bool = False,
         validate_features: bool = False,
-        utilities: bool = False
+        utilities: bool = False,
+        piece_wise: bool = False
     ):
         """Inner predict logic, the dataset is not assumed to be already build. Should not be used in public
 
@@ -205,15 +212,19 @@ class RUMBooster:
             data = self.train_set
 
         #compute utilities with corresponding features
-        for k, booster in enumerate(self.boosters):
-            U.append(booster.predict(data[k].get_data(), 
-                            start_iteration, 
-                            num_iteration, 
-                            raw_score, 
-                            pred_leaf, 
-                            pred_contrib,
-                            data_has_header,
-                            validate_features))
+        if not piece_wise:
+            for k, booster in enumerate(self.boosters):
+                U.append(booster.predict(data[k].get_data(), 
+                                start_iteration, 
+                                num_iteration, 
+                                raw_score, 
+                                pred_leaf, 
+                                pred_contrib,
+                                data_has_header,
+                                validate_features))
+        else:
+            U = self.pw_utility(data)
+
         preds = np.array(U).T
 
         #softmax
@@ -228,47 +239,91 @@ class RUMBooster:
         exps = np.exp(shiftx)
         return exps / exps.sum(axis=1)[:,None]
     
-    def _stairs_to_pw(self, train_data, test_data):
-        """Transform a stair output to a piecewise linear prediction"""
-        weights = self.weights_to_plot()
-        pw_func = {}
-        for u in weights:
-            pw_func[u] = {}
-            for f in weights[u]:
-                split_points = weights[u][f]['Splitting points']
-                leaf_values = weights[u][f]['Histogram values']
+    def _get_mid_pos(self, train_data, split_points):
+        '''
+        return midpoint in-between two split points for a specific feature
+        '''
+        #getting position in the middle of splitting points intervals
+        if len(split_points) > 1:
+            mid_pos = [(sp2 + sp1)/2 for sp2, sp1 in zip(split_points[:-1], split_points[1:])]
+        else:
+            mid_pos = []
+        
+        mid_pos.insert(0, min(train_data)) #adding first point
+        mid_pos.append(max(train_data)) #adding last point
 
-                if len(split_points) < 1:
-                    pw_func[u][f] = weights[u][f]['Histogram values']
+        return mid_pos
+    
+    def _get_slope(self, mid_pos, leaf_values):
+        '''
+        get slope of the piece-wise utility function for a specific feature
+        '''
+        if len(leaf_values) <= 1:
+            return 0
+        
+        slope = [(leaf_values[i+1]-leaf_values[i])/(mid_pos[i+1]-mid_pos[i]) for i in range(0, len(mid_pos)-1)]
+        slope.insert(0, 0) #adding first slope
+        slope.append(0) #adding last slope
+
+        return slope
+
+    def _stairs_to_pw(self, train_data, data_to_transform = None, util_for_plot = False):
+        '''
+        Transform a stair output to a piecewise linear prediction
+        '''
+        if data_to_transform is None:
+            data_to_transform = train_data
+        weights = self.weights_to_plot()
+        pw_utility = []
+        for u in weights:
+            if util_for_plot:
+                pw_util = []
+            else:
+                pw_util = np.zeros(data_to_transform.iloc[:, 0].shape)
+
+            for f in weights[u]:
+                leaf_values = weights[u][f]['Histogram values']
+                split_points =  weights[u][f]['Splitting points']
+                
+                mid_pos = self._get_mid_pos(train_data[f],split_points)
+
+                if len(mid_pos) < 1:
                     break
                 
-                #getting position in the middle of splitting points intervals
-                if len(split_points) > 1:
-                    mid_pos = [(sp2 + sp1)/2 for sp2, sp1 in zip(split_points[:-1], split_points[1:])]
-                else:
-                    mid_pos = []
-                
-                mid_pos.insert(0, min(train_data[f])) #adding first point
-                mid_pos.append(max(train_data[f])) #adding last point
+                slope = self._get_slope(mid_pos, leaf_values)
 
-                slope = [(leaf_values[i+1]-leaf_values[i])/(mid_pos[i+1]-mid_pos[i]) for i in range(0, len(mid_pos)-1)]
-                slope.insert(0, 0) #adding first slope
-                slope.append(0) #adding last slope
+                transf_data_arr = np.array(data_to_transform[f])
+                conds = [(transf_data_arr<mp2) & (transf_data_arr>= mp1)  for mp1, mp2 in zip(mid_pos[:-1], mid_pos[1:])]
+                conds.insert(0, transf_data_arr<mid_pos[0])
+                conds.append(transf_data_arr >= mid_pos[-1])
 
-                conds = [test_data[f]<mp for mp in mid_pos]
-                conds.append(test_data[f] >= mid_pos[-1])
-                values = [lambda x: leaf_values[j] + slope[j+1] * (x - mid_pos[j]) for j in range(0, len(leaf_values))]
+                values = [lambda x, j=j: leaf_values[j] + slope[j+1] * (x - mid_pos[j]) for j in range(0, len(leaf_values))]
                 values.insert(0, leaf_values[0])
-                pw_func[u][f] = np.piecewise(test_data[f], conds, values)
+                
+                if util_for_plot:
+                    pw_util.append(np.piecewise(transf_data_arr, conds, values))
+                else:
+                    pw_util = np.add(pw_util, np.piecewise(transf_data_arr, conds, values))
+            pw_utility.append(pw_util)
 
-        return pw_func
+        return pw_utility
 
-    def pw_utility(self, data, test_data):
+    def pw_utility(self, data, data_to_transform = None):
         '''
         compute the value of utilities with piece-wise linear approximation
         '''
-        pw_func = self._stairs_to_pw(data, test_data)
-        print(pw_func)
+        return self._stairs_to_pw(data, data_to_transform)
+    
+    def pw_predict(self, data, data_to_transform = None):
+        '''
+        compute predictions with piece-wise utility
+        '''
+        U = np.array(self.pw_utility(data, data_to_transform)).T
+
+        preds = self._stablesoftmax(U)
+
+        return preds
+
 
     def accuracy(self, preds, labels):
         """
@@ -595,7 +650,7 @@ class RUMBooster:
         return x_values, nonlin_function
     
     def plot_parameters(self, params, X, utility_names, Betas = None , withPointDist = False, model_unconstrained = None, 
-                        params_unc = None):
+                        params_unc = None, with_pw = False):
         """
         Plot the non linear impact of parameters on the utility function. When specified, unconstrained parameters
         and parameters from a RUM model can be added to the plot.
@@ -618,6 +673,8 @@ class RUMBooster:
             The unconstrained model. Must be trained and compatible with dump_model().
         params_unc: dict, optional (default = None)
             Dictionary containing parameters used to train the unconstrained model
+        with_pw: bool, optional (default = False)
+            If the piece-wise function should be included in the graph
         """
         #getting learning rate
         if params['learning_rate'] is not None:
@@ -633,6 +690,9 @@ class RUMBooster:
         
         #get and prepare weights
         weights_arranged = self.weights_to_plot()
+
+        if with_pw:
+            pw_func = self.plot_util_pw(X)
         
         if model_unconstrained is not None:
             weights_arranged_unc = self.weights_to_plot(model=model_unconstrained)
@@ -644,7 +704,7 @@ class RUMBooster:
             for i, f in enumerate(weights_arranged[u]):
                 
                 #create nonlinear plot
-                x, non_lin_func = self.non_lin_function(weights_arranged[u][f], 0, 1.1*max(X[f]), 1000)
+                x, non_lin_func = self.non_lin_function(weights_arranged[u][f], 0, 1.05*max(X[f]), 10000)
                 
                 non_lin_func_with_lr = [h/lr for h in non_lin_func]
                 
@@ -660,7 +720,7 @@ class RUMBooster:
                 elif 'cost' in f:
                     plt.xlabel('{} [£]'.format(f))
                 elif 'distance' in f:
-                    plt.xlabel('{} [km]'.format(f))
+                    plt.xlabel('{} [m]'.format(f))
                 else:
                     plt.xlabel('{}'.format(f))
 
@@ -668,9 +728,13 @@ class RUMBooster:
 
                 #plot unconstrained model parameters
                 if model_unconstrained is not None:
-                    _, non_lin_func_unc = self.non_lin_function(weights_arranged_unc[u][f], 0, 1.1*max(X[f]), 1000)
+                    _, non_lin_func_unc = self.non_lin_function(weights_arranged_unc[u][f], 0, 1.05*max(X[f]), 10000)
                     non_lin_func_with_lr_unc =  [h_unc/lr_unc for h_unc in non_lin_func_unc]
-                    sns.lineplot(x=x, y=non_lin_func_with_lr_unc, lw=2)      
+                    sns.lineplot(x=x, y=non_lin_func_with_lr_unc, lw=2)
+
+                if with_pw:
+                    pw_func_with_lr = [pw/lr for pw in pw_func[int(u)][i]]
+                    sns.lineplot(x=x, y=pw_func_with_lr, lw=2)
                 
                 #plot RUM parameters
                 if Betas is not None:
@@ -701,12 +765,14 @@ class RUMBooster:
                     else:
                         if withPointDist:
                             plt.legend(labels = ['With GBM constrained', 'Data'])
+                        elif with_pw:
+                            plt.legend(labels = ['With GBM constrained', 'With piece-wise linear function'])
                         else:
                             plt.legend(labels = ['With GBM constrained'])
-                            
+
                 plt.show()
 
-    def plot_util(j, f, F, start, stop, points=10000):
+    def plot_util(self, j, f, F, start, stop, points=10000):
         xi=[]
         for i in range(F[j]):
             if i == f:
@@ -718,6 +784,23 @@ class RUMBooster:
         ypred = booster.predict(xin)
         
         plt.plot(np.linspace(start,stop,points), ypred)
+
+    def plot_util_pw(self, data_train, points = 10000):
+        '''
+        plot the piece-wise utility function
+        '''
+        features = data_train.columns
+        data_to_transform = {}
+        for f in features:
+            xi = np.linspace(0, 1.05*max(data_train[f]), points)
+            data_to_transform[f] = xi
+
+        data_to_transform = pd.DataFrame(data_to_transform)
+
+        pw_func = self._stairs_to_pw(data_train, data_to_transform, util_for_plot = True)
+
+        return pw_func
+        
 
     def model_from_string(self, model_str: str):
         """Load RUMBooster from a string.
