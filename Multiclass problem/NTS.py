@@ -35,12 +35,12 @@ class nts():
         self.random_state = 42
 
         self.params = {'max_depth': 1, 
-                       'num_boost_round': 1000, 
-                       'learning_rate': 0.2,
+                       'num_boost_round': 1500, 
+                       'learning_rate': 0.1,
                        'verbosity': 2,
                        'objective':'multiclass',
                        'num_classes': 4,
-                       'early_stopping_round':20
+                       'early_stopping_round':50
                       }
 
         self._load_preprocess_data()

@@ -1,10 +1,13 @@
 from NTS import nts
+from LTDS_Tim import ltds_54
 from LTDS import ltds
 import numpy as np
 
-ltds_model = ltds(model_file='LTDS_gbru_model.json')
+ltds_model = ltds()
+#ltds_model = ltds_54()
 
-ltds_model.gbru_model.plot_parameters(ltds_model.params, ltds_model.dataset_train, utility_names = {'0': 'Walking', '1': 'Cycling', '2': 'Public transport','3': 'Driving'}, with_pw = True)
+ltds_model.bio_rum_train(with_pw=True)
+#ltds_model.gbru_model.plot_parameters(ltds_model.params, ltds_model.dataset_train, utility_names = {'0': 'Walking', '1': 'Cycling', '2': 'Public transport','3': 'Driving'}, with_pw = True, with_stairs=True)
 
 #pw_preds = ltds_model.gbru_model.pw_predict(ltds_model.dataset_train)
 

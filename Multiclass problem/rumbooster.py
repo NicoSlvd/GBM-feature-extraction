@@ -150,7 +150,7 @@ class RUMBooster:
                                 data_has_header,
                                 validate_features))
         else:
-            U = self.pw_utility(data.get_data())
+            U = self.pw_predict(data.get_data(), utility= True)
 
         preds = np.array(U).T
 
@@ -223,7 +223,7 @@ class RUMBooster:
                                 data_has_header,
                                 validate_features))
         else:
-            U = self.pw_utility(data)
+            U = self.pw_predict(data, utility= True)
 
         preds = np.array(U).T
 
@@ -271,6 +271,13 @@ class RUMBooster:
         '''
         Transform a stair output to a piecewise linear prediction
         '''
+        if type(train_data) is list:
+            new_train_data = train_data[0].get_data()
+            for data in train_data[1:]:
+                new_train_data = new_train_data.join(data.get_data(), lsuffix='DROP').filter(regex="^(?!.*DROP)")
+
+            train_data = new_train_data
+
         if data_to_transform is None:
             data_to_transform = train_data
         weights = self.weights_to_plot()
@@ -281,24 +288,31 @@ class RUMBooster:
             else:
                 pw_util = np.zeros(data_to_transform.iloc[:, 0].shape)
 
-            for f in weights[u]:
+            for i, f in enumerate(weights[u]):
                 leaf_values = weights[u][f]['Histogram values']
                 split_points =  weights[u][f]['Splitting points']
-                
-                mid_pos = self._get_mid_pos(train_data[f],split_points)
 
-                if len(mid_pos) < 1:
+                if len(split_points) < 1:
                     break
                 
-                slope = self._get_slope(mid_pos, leaf_values)
+                if self.rum_structure[int(u)]['columns'].index(f) not in self.rum_structure[int(u)]['categorical_feature']:
 
-                transf_data_arr = np.array(data_to_transform[f])
-                conds = [(transf_data_arr<mp2) & (transf_data_arr>= mp1)  for mp1, mp2 in zip(mid_pos[:-1], mid_pos[1:])]
-                conds.insert(0, transf_data_arr<mid_pos[0])
-                conds.append(transf_data_arr >= mid_pos[-1])
+                    mid_pos = self._get_mid_pos(train_data[f],split_points)
+                    
+                    slope = self._get_slope(mid_pos, leaf_values)
 
-                values = [lambda x, j=j: leaf_values[j] + slope[j+1] * (x - mid_pos[j]) for j in range(0, len(leaf_values))]
-                values.insert(0, leaf_values[0])
+                    transf_data_arr = np.array(data_to_transform[f])
+                    conds = [(mp1 <= transf_data_arr) & (transf_data_arr < mp2) for mp1, mp2 in zip(mid_pos[:-1], mid_pos[1:])]
+                    conds.insert(0, transf_data_arr<mid_pos[0])
+                    conds.append(transf_data_arr >= mid_pos[-1])
+
+                    values = [lambda x, j=j: leaf_values[j] + slope[j+1] * (x - mid_pos[j]) for j in range(0, len(leaf_values))]
+                    values.insert(0, leaf_values[0])
+                else:
+                    conds = [(sp1 <= transf_data_arr) & (transf_data_arr < sp2) for sp1, sp2 in zip(split_points[:-1], split_points[1:])]
+                    conds.insert(0, transf_data_arr < split_points[0])
+                    conds.append(transf_data_arr >= split_points[-1])
+                    values = leaf_values
                 
                 if util_for_plot:
                     pw_util.append(np.piecewise(transf_data_arr, conds, values))
@@ -308,21 +322,16 @@ class RUMBooster:
 
         return pw_utility
 
-    def pw_utility(self, data, data_to_transform = None):
-        '''
-        compute the value of utilities with piece-wise linear approximation
-        '''
-        return self._stairs_to_pw(data, data_to_transform)
-    
-    def pw_predict(self, data, data_to_transform = None):
+    def pw_predict(self, data, data_to_transform = None, utility = False):
         '''
         compute predictions with piece-wise utility
         '''
-        U = np.array(self.pw_utility(data, data_to_transform)).T
+        U = self._stairs_to_pw(data, data_to_transform)
 
-        preds = self._stablesoftmax(U)
-
-        return preds
+        if utility:
+            return U
+        
+        return self._stablesoftmax(np.array(U).T)
 
 
     def accuracy(self, preds, labels):
@@ -413,6 +422,8 @@ class RUMBooster:
                     params_j['monotone_constraints'] = struct['monotone_constraints']
                 if 'interaction_constraints' in struct:
                     params_j['interaction_constraints'] = struct['interaction_constraints']
+                if 'categorical_feature' in struct:
+                    params_j['categorical_feature'] = struct['categorical_feature']
 
             params_J.append(params_j)
 
@@ -650,7 +661,7 @@ class RUMBooster:
         return x_values, nonlin_function
     
     def plot_parameters(self, params, X, utility_names, Betas = None , withPointDist = False, model_unconstrained = None, 
-                        params_unc = None, with_pw = False):
+                        params_unc = None, with_pw = False, with_stairs = True):
         """
         Plot the non linear impact of parameters on the utility function. When specified, unconstrained parameters
         and parameters from a RUM model can be added to the plot.
@@ -675,6 +686,8 @@ class RUMBooster:
             Dictionary containing parameters used to train the unconstrained model
         with_pw: bool, optional (default = False)
             If the piece-wise function should be included in the graph
+        with_stairs: bool, optional (default = True)
+            If False, continuous feature graphs are not drawn with stairs
         """
         #getting learning rate
         if params['learning_rate'] is not None:
@@ -710,9 +723,9 @@ class RUMBooster:
                 
                 #plot parameters
                 plt.figure(figsize=(10, 6))
-                sns.lineplot(x=x, y=non_lin_func_with_lr, lw=2)
+
+                                    
                 plt.title('Influence of {} on the predictive function (utility)'.format(f), fontdict={'fontsize':  16})
-                #plt.xlabel('{} [{}]'.format(f, units[f]))
                 if 'dur' in f:
                     plt.xlabel('{} [h]'.format(f))
                 elif 'time' in f:
@@ -726,13 +739,16 @@ class RUMBooster:
 
                 plt.ylabel('{} utility'.format(utility_names[u]))
 
+                if with_stairs | (self.rum_structure[int(u)]['columns'].index(f) in self.rum_structure[int(u)]['categorical_feature']):
+                    sns.lineplot(x=x, y=non_lin_func_with_lr, lw=2)
+
                 #plot unconstrained model parameters
                 if model_unconstrained is not None:
                     _, non_lin_func_unc = self.non_lin_function(weights_arranged_unc[u][f], 0, 1.05*max(X[f]), 10000)
                     non_lin_func_with_lr_unc =  [h_unc/lr_unc for h_unc in non_lin_func_unc]
                     sns.lineplot(x=x, y=non_lin_func_with_lr_unc, lw=2)
 
-                if with_pw:
+                if (with_pw) & (self.rum_structure[int(u)]['columns'].index(f)  not in self.rum_structure[int(u)]['categorical_feature']):
                     pw_func_with_lr = [pw/lr for pw in pw_func[int(u)][i]]
                     sns.lineplot(x=x, y=pw_func_with_lr, lw=2)
                 
@@ -892,7 +908,8 @@ def rum_train(
     feature_name: Union[List[str], str] = 'auto',
     categorical_feature: Union[List[str], List[int], str] = 'auto',
     keep_training_booster: bool = False,
-    callbacks: Optional[List[Callable]] = None
+    callbacks: Optional[List[Callable]] = None,
+    pw_utility: bool = False
 ) -> RUMBooster:
     """Perform the RUM training with given parameters.
 
@@ -963,6 +980,8 @@ def rum_train(
     callbacks : list of callable, or None, optional (default=None)
         List of callback functions that are applied at each iteration.
         See Callbacks in Python API for more information.
+    pw_utility: bool, optional (default=False)
+        If true, compute continuous feature utility in a piece-wise linear way.
 
     Note
     ----
@@ -1111,7 +1130,7 @@ def rum_train(
                 evaluation_result_list = earlyStopException.best_score
 
         #make predictions after boosting round to compute new cross entropy and for next iteration grad and hess
-        rum_booster._preds = rum_booster._inner_predict()
+        rum_booster._preds = rum_booster._inner_predict(piece_wise=pw_utility)
 
         #compute cross validation on training or validation test
         if valid_sets is not None:
@@ -1119,7 +1138,7 @@ def rum_train(
                 cross_entropy = rum_booster.cross_entropy(rum_booster._preds, train_set.get_label().astype(int))
             else:
                 for valid_set_J in rum_booster.valid_sets:
-                    preds_valid = rum_booster._inner_predict(valid_set_J)
+                    preds_valid = rum_booster._inner_predict(valid_set_J, piece_wise=pw_utility)
                     cross_entropy = rum_booster.cross_entropy(preds_valid, valid_set_J[0].get_label().astype(int))
         
             if cross_entropy < rum_booster.best_score:
@@ -1130,7 +1149,7 @@ def rum_train(
                 print('[{}] -- Logloss value: {}'.format(i + 1, cross_entropy))
         
         #early stopping if early stopping criterion in all boosters
-        if (params["earl_stopping_round"] != 0) and (rum_booster.best_iteration + params["early_stopping_round"] < i + 1):
+        if (params["early_stopping_round"] != 0) and (rum_booster.best_iteration + params["early_stopping_round"] < i + 1):
             print('Early stopping at iteration {}, with a best score of {}'.format(rum_booster.best_iteration, rum_booster.best_score))
             break
 
