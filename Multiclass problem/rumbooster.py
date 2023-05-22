@@ -288,20 +288,20 @@ class RUMBooster:
             else:
                 pw_util = np.zeros(data_to_transform.iloc[:, 0].shape)
 
-            for i, f in enumerate(weights[u]):
+            for f in weights[u]:
                 leaf_values = weights[u][f]['Histogram values']
                 split_points =  weights[u][f]['Splitting points']
+                transf_data_arr = np.array(data_to_transform[f])
 
                 if len(split_points) < 1:
                     break
                 
                 if self.rum_structure[int(u)]['columns'].index(f) not in self.rum_structure[int(u)]['categorical_feature']:
 
-                    mid_pos = self._get_mid_pos(train_data[f],split_points)
+                    mid_pos = self._get_mid_pos(self.train_set[int(u)].get_data()[f],split_points)
                     
                     slope = self._get_slope(mid_pos, leaf_values)
 
-                    transf_data_arr = np.array(data_to_transform[f])
                     conds = [(mp1 <= transf_data_arr) & (transf_data_arr < mp2) for mp1, mp2 in zip(mid_pos[:-1], mid_pos[1:])]
                     conds.insert(0, transf_data_arr<mid_pos[0])
                     conds.append(transf_data_arr >= mid_pos[-1])
@@ -418,9 +418,9 @@ class RUMBooster:
             else:
                 self.with_linear_trees = False
             if struct:
-                if 'monotone_constraints' in struct:
+                if len(struct['monotone_constraints'])>0:
                     params_j['monotone_constraints'] = struct['monotone_constraints']
-                if 'interaction_constraints' in struct:
+                if len(struct['interaction_constraints'])>0:
                     params_j['interaction_constraints'] = struct['interaction_constraints']
                 if 'categorical_feature' in struct:
                     params_j['categorical_feature'] = struct['categorical_feature']
@@ -788,18 +788,18 @@ class RUMBooster:
 
                 plt.show()
 
-    def plot_util(self, j, f, F, start, stop, points=10000):
-        xi=[]
-        for i in range(F[j]):
-            if i == f:
-                xi.append(np.linspace(start,stop,points))
-            else:
-                xi.append(np.zeros(points))
-        xin = np.array(xi).T
-        booster = self.boosters[j]
-        ypred = booster.predict(xin)
-        
-        plt.plot(np.linspace(start,stop,points), ypred)
+    def plot_util(self, data_train, points=10000):
+        sns.set_theme()
+        for j, struct in enumerate(self.rum_structure):
+            booster = self.boosters[j]
+            for i, f in enumerate(struct['columns']):
+                xin = np.zeros(shape = (points, len(struct['columns'])))
+                xin[:, i] = np.linspace(0,1.05*max(data_train[f]),points)
+                
+                ypred = booster.predict(xin)
+                plt.figure()
+                plt.plot(np.linspace(0,1.05*max(data_train[f]),points), ypred)
+                plt.title(f)
 
     def plot_util_pw(self, data_train, points = 10000):
         '''
@@ -1130,6 +1130,9 @@ def rum_train(
                 evaluation_result_list = earlyStopException.best_score
 
         #make predictions after boosting round to compute new cross entropy and for next iteration grad and hess
+        #if i < 21:
+        #    rum_booster._preds = rum_booster._inner_predict(piece_wise=False)
+        #else:
         rum_booster._preds = rum_booster._inner_predict(piece_wise=pw_utility)
 
         #compute cross validation on training or validation test
@@ -1139,6 +1142,7 @@ def rum_train(
             else:
                 for valid_set_J in rum_booster.valid_sets:
                     preds_valid = rum_booster._inner_predict(valid_set_J, piece_wise=pw_utility)
+                    cross_entropy_train = rum_booster.cross_entropy(rum_booster._preds, train_set.get_label().astype(int))
                     cross_entropy = rum_booster.cross_entropy(preds_valid, valid_set_J[0].get_label().astype(int))
         
             if cross_entropy < rum_booster.best_score:
@@ -1146,7 +1150,10 @@ def rum_train(
                 rum_booster.best_iteration = i+1
         
             if (params['verbosity'] >= 1) and (i % 10 == 0):
-                print('[{}] -- Logloss value: {}'.format(i + 1, cross_entropy))
+                if is_valid_contain_train:
+                    print('[{}] -- Logloss value on train set: {}'.format(i + 1, cross_entropy))
+                else:
+                    print('[{}] -- Logloss value on train set {} \n     --  Logloss value on test set: {}'.format(i + 1, cross_entropy_train, cross_entropy))
         
         #early stopping if early stopping criterion in all boosters
         if (params["early_stopping_round"] != 0) and (rum_booster.best_iteration + params["early_stopping_round"] < i + 1):

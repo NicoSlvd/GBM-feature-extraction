@@ -1,11 +1,14 @@
 *.pickle
 *.html
 *.iter
-*.Toml
+*.toml
 .ipynb_checkpoints/
 __pycache__/
 abstract.txt
 todo.txt
 Rubbish/
-../Binary problem/
-../Literature/
+Binary problem/
+Literature/
+elsarticle/
+*.pptx
+*.json

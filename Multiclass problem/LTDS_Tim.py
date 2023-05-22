@@ -30,9 +30,9 @@ class ltds_54():
         self.dataset_name = 'LTDS'
 
         self.params = {'max_depth': 1, 
-                       'num_boost_round': 1000, 
+                       'num_boost_round': 1500, 
                        'learning_rate': 0.1,
-                       'verbosity': 2,
+                       'verbosity': 1,
                        'objective':'multiclass',
                        'num_classes': 4,
                        'early_stopping_round':50,
@@ -45,7 +45,9 @@ class ltds_54():
             self.gbru_model = RUMBooster(model_file=model_file)
             self.gbru_model.rum_structure = self._bio_to_rumboost()
             self.gbru_cross_entropy = self.gbru_model.best_score
-            self._rum_predict()
+            bio_database_test = self._bio_database(self.dataset_test, 'LTDS_test')
+            self._new_variables(bio_database_test)
+            self._rum_predict(data_test = bio_database_test.data)
 
 
     def _load_preprocess_data(self):
@@ -382,7 +384,7 @@ class ltds_54():
         else:
             raise ValueError("Parent does not contain beta and variable")
         
-    def _bio_to_rumboost(self):
+    def _bio_to_rumboost(self, all_columns = False, monotonic_constraints = True, interaction_contraints = True):
         '''
         Converts a biogeme model to a rumboost dict
         '''
@@ -394,30 +396,44 @@ class ltds_54():
             for i, pair in enumerate(self._process_parent(v, [])):
                 rum_structure[-1]['columns'].append(pair[1])
                 rum_structure[-1]['betas'].append(pair[0])
-                rum_structure[-1]['interaction_constraints'].append([i])
+                if interaction_contraints:
+                    rum_structure[-1]['interaction_constraints'].append([i])
                 if ('TIME' not in pair[0]) & ('COST' not in pair[0]) & ('DISTANCE' not in pair[0]) & ('TRAFFIC' not in pair[0]):
                     rum_structure[-1]['categorical_feature'].append(i)
                 bounds = self.model.getBoundsOnBeta(pair[0])
-                if (bounds[0] is not None) and (bounds[1] is not None):
-                    raise ValueError("Only one bound can be not None")
-                if bounds[0] is not None:
-                    if bounds[0] >= 0:
-                        rum_structure[-1]['monotone_constraints'].append(1)
-                elif bounds[1] is not None:
-                    if bounds[1] <= 0:
-                        rum_structure[-1]['monotone_constraints'].append(-1)
-                else:
-                    rum_structure[k]['monotone_constraints'].append(0)
+                if monotonic_constraints:
+                    if (bounds[0] is not None) and (bounds[1] is not None):
+                        raise ValueError("Only one bound can be not None")
+                    if bounds[0] is not None:
+                        if bounds[0] >= 0:
+                            rum_structure[-1]['monotone_constraints'].append(1)
+                    elif bounds[1] is not None:
+                        if bounds[1] <= 0:
+                            rum_structure[-1]['monotone_constraints'].append(-1)
+                    else:
+                        rum_structure[k]['monotone_constraints'].append(0)
+            if all_columns:
+                rum_structure[-1]['columns'] = [col for col in self.model.database.data.columns.values.tolist() if col != 'choice']
         return rum_structure
 
-    def bio_rum_train(self, valid_test=False, with_pw = False):
-        rum_structure = self._bio_to_rumboost()
-
-        self.params['learning_rate'] = 0.1
+    def bio_rum_train(self, valid_test=False, with_pw = False, lr = 0.1, md=1, all_columns = False, monotonic_constraints = True, interaction_constraints = True, save_model = True):
+        rum_structure = self._bio_to_rumboost(all_columns=all_columns, monotonic_constraints=monotonic_constraints, interaction_contraints=interaction_constraints)
+        
+        self.params['learning_rate'] = lr
+        self.params['max_depth'] = md
         self.params['early_stopping_rounds'] = 50
-        self.params['num_boost_round'] = 1500
+        self.params['num_boost_round'] = 3000
         self.params['boosting'] = 'gbdt'
         self.params['monotone_constraints_method'] =  'advanced'
+        self.params['min_sum_hessian'] = 1e-6
+        self.params['min_data_in_leaf'] = 1
+        
+        # self.params['bagging_fraction'] = 0.7
+        # self.params['feature_fraction'] = 0.7
+        # self.params['feature_fraction_bynode'] = 0.7
+        # self.params['max_delta_step'] = 1
+        # self.params['lambda_l1'] = 0.006
+        # self.params['lambda_l2'] = 2
 
         data = self.model.database.data
         target = self.model.loglike.choice.name
@@ -435,7 +451,8 @@ class ltds_54():
         self.gbru_cross_entropy = model_rumtrained.best_score
         self.gbru_model = model_rumtrained
 
-        self.gbru_model.save_model('LTDS_54_gbru_model.json')
+        if save_model:
+            self.gbru_model.save_model('LTDS_54_gbru_model_{}_depth{}_pw{}_mono{}_interac{}.json'.format(self.params['learning_rate'], md, with_pw, monotonic_constraints, interaction_constraints))
 
     def hyperparameter_optim(self):
         '''
@@ -506,13 +523,15 @@ class ltds_54():
             bioce_test += np.log(self.bio_prediction.iloc[i,l])
         self.bio_cross_entropy_test = -bioce_test/len(self.dataset_test[target])
 
-    def _rum_predict(self):
+    def _rum_predict(self, data_test = None):
         '''
         predictions on the test set from the GBRU model
         '''
+        if data_test is None:
+            data_test = self.dataset_test
         target = self.model.loglike.choice.name
-        features = [f for f in self.dataset_test.columns if f != target]
-        test_data = lgb.Dataset(self.dataset_test.loc[:, features], label=self.dataset_test[[target]], free_raw_data=False)
+        features = [f for f in data_test.columns if f != target]
+        test_data = lgb.Dataset(data_test.loc[:, features], label=data_test[[target]], free_raw_data=False)
         self.gbru_prediction = self.gbru_model.predict(test_data)
         test_data.construct()
         self.gbru_cross_entropy_test = self.gbru_model.cross_entropy(self.gbru_prediction,test_data.get_label().astype(int))

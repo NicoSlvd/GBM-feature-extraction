@@ -35,9 +35,9 @@ class ltds():
         self.random_state = 42
 
         self.params = {'max_depth': 1, 
-                       'num_boost_round': 1000, 
+                       'num_boost_round': 1500, 
                        'learning_rate': 0.1,
-                       'verbosity': 2,
+                       'verbosity': 1,
                        'objective':'multiclass',
                        'num_classes': 4,
                        'early_stopping_round':50,
@@ -184,7 +184,7 @@ class ltds():
         else:
             raise ValueError("Parent does not contain beta and variable")
         
-    def _bio_to_rumboost(self):
+    def _bio_to_rumboost(self, all_columns = False, monotonic_constraints = True, interaction_contraints = True):
         '''
         Converts a biogeme model to a rumboost dict
         '''
@@ -196,26 +196,31 @@ class ltds():
             for i, pair in enumerate(self._process_parent(v, [])):
                 rum_structure[-1]['columns'].append(pair[1])
                 rum_structure[-1]['betas'].append(pair[0])
-                rum_structure[-1]['interaction_constraints'].append([i])
-                if ('dur' not in pair[0]) & ('cost' not in pair[0]) & ('time' not in pair[0]) & ('age' not in pair[0]) & ('distance' not in pair[0]):
+                if interaction_contraints:
+                    rum_structure[-1]['interaction_constraints'].append([i])
+                if ('TIME' not in pair[0]) & ('COST' not in pair[0]) & ('DISTANCE' not in pair[0]) & ('TRAFFIC' not in pair[0]):
                     rum_structure[-1]['categorical_feature'].append(i)
                 bounds = self.model.getBoundsOnBeta(pair[0])
-                if (bounds[0] is not None) and (bounds[1] is not None):
-                    raise ValueError("Only one bound can be not None")
-                if bounds[0] is not None:
-                    if bounds[0] >= 0:
-                        rum_structure[-1]['monotone_constraints'].append(1)
-                elif bounds[1] is not None:
-                    if bounds[1] <= 0:
-                        rum_structure[-1]['monotone_constraints'].append(-1)
-                else:
-                    rum_structure[k]['monotone_constraints'].append(0)
+                if monotonic_constraints:
+                    if (bounds[0] is not None) and (bounds[1] is not None):
+                        raise ValueError("Only one bound can be not None")
+                    if bounds[0] is not None:
+                        if bounds[0] >= 0:
+                            rum_structure[-1]['monotone_constraints'].append(1)
+                    elif bounds[1] is not None:
+                        if bounds[1] <= 0:
+                            rum_structure[-1]['monotone_constraints'].append(-1)
+                    else:
+                        rum_structure[k]['monotone_constraints'].append(0)
+            if all_columns:
+                rum_structure[-1]['columns'] = [col for col in self.model.database.data.columns.values.tolist() if col != 'choice']
         return rum_structure
 
-    def bio_rum_train(self, valid_test=False, with_pw = False):
-        rum_structure = self._bio_to_rumboost()
+    def bio_rum_train(self, valid_test=False, with_pw = False, lr = 0.1, md = 1, all_columns = False, monotonic_constraints = True, interaction_constraints = True, save_model = True):
+        rum_structure = self._bio_to_rumboost(all_columns=all_columns, monotonic_constraints=monotonic_constraints, interaction_contraints=interaction_constraints)
 
-        self.params['learning_rate'] = 0.1
+        self.params['learning_rate'] = lr
+        self.params['max_depth'] = md
         self.params['early_stopping_rounds'] = 50
         self.params['num_boost_round'] = 1500
         self.params['boosting'] = 'gbdt'
@@ -233,7 +238,8 @@ class ltds():
         self.gbru_cross_entropy = model_rumtrained.best_score
         self.gbru_model = model_rumtrained
 
-        self.gbru_model.save_model('LTDS_gbru_model.json')
+        if save_model:
+            self.gbru_model.save_model('LTDS_54_gbru_model_{}_pw{}_mono{}_interac{}.json'.format(self.params['learning_rate'], with_pw, monotonic_constraints, interaction_constraints))
 
     def hyperparameter_optim(self):
         '''
