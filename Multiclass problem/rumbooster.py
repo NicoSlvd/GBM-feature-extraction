@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
+from scipy.special import softmax
 
 from operator import attrgetter
 from pathlib import Path
@@ -156,7 +157,7 @@ class RUMBooster:
 
         #softmax
         if not utilities:
-            preds = self._stablesoftmax(preds)
+            preds = softmax(preds, axis=1)
    
         return preds
     
@@ -229,7 +230,7 @@ class RUMBooster:
 
         #softmax
         if not utilities:
-            preds = self._stablesoftmax(preds)
+            preds = softmax(preds, axis=1)
 
         return preds
     
@@ -331,7 +332,7 @@ class RUMBooster:
         if utility:
             return U
         
-        return self._stablesoftmax(np.array(U).T)
+        return softmax(np.array(U).T, axis=1)
 
 
     def accuracy(self, preds, labels):
@@ -661,7 +662,7 @@ class RUMBooster:
         return x_values, nonlin_function
     
     def plot_parameters(self, params, X, utility_names, Betas = None , withPointDist = False, model_unconstrained = None, 
-                        params_unc = None, with_pw = False, with_stairs = True):
+                        params_unc = None, with_pw = False, with_stairs = True, save_figure=False):
         """
         Plot the non linear impact of parameters on the utility function. When specified, unconstrained parameters
         and parameters from a RUM model can be added to the plot.
@@ -690,16 +691,16 @@ class RUMBooster:
             If False, continuous feature graphs are not drawn with stairs
         """
         #getting learning rate
-        if params['learning_rate'] is not None:
-            lr = float(params['learning_rate'])
-        else:
-            lr = 0.3
+        # if params['learning_rate'] is not None:
+        #     lr = float(params['learning_rate'])
+        # else:
+        #     lr = 0.3
         
-        if model_unconstrained is not None:
-            if params_unc['learning_rate'] is not None:
-                lr_unc = float(params_unc['learning_rate'])
-            else:
-                lr_unc = 0.3
+        # if model_unconstrained is not None:
+        #     if params_unc['learning_rate'] is not None:
+        #         lr_unc = float(params_unc['learning_rate'])
+        #     else:
+        #         lr_unc = 0.3
         
         #get and prepare weights
         weights_arranged = self.weights_to_plot()
@@ -719,7 +720,7 @@ class RUMBooster:
                 #create nonlinear plot
                 x, non_lin_func = self.non_lin_function(weights_arranged[u][f], 0, 1.05*max(X[f]), 10000)
                 
-                non_lin_func_with_lr = [h/lr for h in non_lin_func]
+                #non_lin_func_with_lr = [h/lr for h in non_lin_func]
                 
                 #plot parameters
                 plt.figure(figsize=(10, 6))
@@ -740,17 +741,17 @@ class RUMBooster:
                 plt.ylabel('{} utility'.format(utility_names[u]))
 
                 if with_stairs | (self.rum_structure[int(u)]['columns'].index(f) in self.rum_structure[int(u)]['categorical_feature']):
-                    sns.lineplot(x=x, y=non_lin_func_with_lr, lw=2)
+                    sns.lineplot(x=x, y=non_lin_func, lw=2)
 
                 #plot unconstrained model parameters
                 if model_unconstrained is not None:
                     _, non_lin_func_unc = self.non_lin_function(weights_arranged_unc[u][f], 0, 1.05*max(X[f]), 10000)
-                    non_lin_func_with_lr_unc =  [h_unc/lr_unc for h_unc in non_lin_func_unc]
-                    sns.lineplot(x=x, y=non_lin_func_with_lr_unc, lw=2)
+                    #non_lin_func_with_lr_unc =  [h_unc/lr_unc for h_unc in non_lin_func_unc]
+                    sns.lineplot(x=x, y=non_lin_func_unc, lw=2)
 
                 if (with_pw) & (self.rum_structure[int(u)]['columns'].index(f)  not in self.rum_structure[int(u)]['categorical_feature']):
-                    pw_func_with_lr = [pw/lr for pw in pw_func[int(u)][i]]
-                    sns.lineplot(x=x, y=pw_func_with_lr, lw=2)
+                    #pw_func_with_lr = [pw/lr for pw in pw_func[int(u)][i]]
+                    sns.lineplot(x=x, y=pw_func[int(u)][i], lw=2)
                 
                 #plot RUM parameters
                 if Betas is not None:
@@ -784,7 +785,10 @@ class RUMBooster:
                         elif with_pw:
                             plt.legend(labels = ['With GBM constrained', 'With piece-wise linear function'])
                         else:
-                            plt.legend(labels = ['With GBM constrained'])
+                            plt.legend(labels = ['GBUM'])
+
+                if save_figure:
+                    plt.savefig('Figures/{} utility, {} feature, model Jose.png'.format(utility_names[u], f))
 
                 plt.show()
 
@@ -1134,7 +1138,6 @@ def rum_train(
         #    rum_booster._preds = rum_booster._inner_predict(piece_wise=False)
         #else:
         rum_booster._preds = rum_booster._inner_predict(piece_wise=pw_utility)
-
         #compute cross validation on training or validation test
         if valid_sets is not None:
             if is_valid_contain_train:

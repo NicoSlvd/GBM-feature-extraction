@@ -34,13 +34,15 @@ class ltds():
         self.test_size = 0.2
         self.random_state = 42
 
-        self.params = {'max_depth': 1, 
-                       'num_boost_round': 1500, 
-                       'learning_rate': 0.1,
+        self.params = {'num_boost_round': 3000,
                        'verbosity': 1,
                        'objective':'multiclass',
                        'num_classes': 4,
-                       'early_stopping_round':50,
+                       'early_stopping_rounds': 50,
+                       'boosting': 'gbdt',
+                       'monotone_constraints_method': 'advanced',
+                       'min_sum_hessian': 1e-6,
+                       'min_data_in_leaf': 1
                       }
 
         self._load_preprocess_data()
@@ -221,10 +223,6 @@ class ltds():
 
         self.params['learning_rate'] = lr
         self.params['max_depth'] = md
-        self.params['early_stopping_rounds'] = 50
-        self.params['num_boost_round'] = 1500
-        self.params['boosting'] = 'gbdt'
-        self.params['monotone_constraints_method'] =  'advanced'
 
         data = self.model.database.data
         target = self.model.loglike.choice.name
@@ -239,7 +237,7 @@ class ltds():
         self.gbru_model = model_rumtrained
 
         if save_model:
-            self.gbru_model.save_model('LTDS_54_gbru_model_{}_pw{}_mono{}_interac{}.json'.format(self.params['learning_rate'], with_pw, monotonic_constraints, interaction_constraints))
+            self.gbru_model.save_model('LTDS_gbru_model_{}_depth{}_pw{}_mono{}_interac{}.json'.format(self.params['learning_rate'], md, with_pw, monotonic_constraints, interaction_constraints))
 
     def hyperparameter_optim(self):
         '''
@@ -310,15 +308,15 @@ class ltds():
             bioce_test += np.log(self.bio_prediction.iloc[i,l])
         self.bio_cross_entropy_test = -bioce_test/len(self.dataset_test[target])
 
-    def _rum_predict(self):
+    def _rum_predict(self, piece_wise = False):
         '''
         predictions on the test set from the GBRU model
         '''
         target = self.model.loglike.choice.name
         features = [f for f in self.dataset_test.columns if f != target]
         test_data = lgb.Dataset(self.dataset_test.loc[:, features], label=self.dataset_test[[target]], free_raw_data=False)
-        self.gbru_prediction = self.gbru_model.predict(test_data)
         test_data.construct()
+        self.gbru_prediction = self.gbru_model.predict(test_data, piece_wise=piece_wise)
         self.gbru_cross_entropy_test = self.gbru_model.cross_entropy(self.gbru_prediction,test_data.get_label().astype(int))
         self.gbru_accuracy_test = self.gbru_model.accuracy(self.gbru_prediction,test_data.get_label().astype(int))
 

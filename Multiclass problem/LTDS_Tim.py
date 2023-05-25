@@ -29,13 +29,15 @@ class ltds_54():
         self.dataset_path_test = 'Data/LTDS_test.csv'
         self.dataset_name = 'LTDS'
 
-        self.params = {'max_depth': 1, 
-                       'num_boost_round': 1500, 
-                       'learning_rate': 0.1,
+        self.params = {'num_boost_round': 3000,
                        'verbosity': 1,
                        'objective':'multiclass',
                        'num_classes': 4,
-                       'early_stopping_round':50,
+                       'early_stopping_rounds': 50,
+                       'boosting': 'gbdt',
+                       'monotone_constraints_method': 'advanced',
+                       'min_sum_hessian': 1e-6,
+                       'min_data_in_leaf': 1
                       }
 
         self._load_preprocess_data()
@@ -421,12 +423,6 @@ class ltds_54():
         
         self.params['learning_rate'] = lr
         self.params['max_depth'] = md
-        self.params['early_stopping_rounds'] = 50
-        self.params['num_boost_round'] = 3000
-        self.params['boosting'] = 'gbdt'
-        self.params['monotone_constraints_method'] =  'advanced'
-        self.params['min_sum_hessian'] = 1e-6
-        self.params['min_data_in_leaf'] = 1
         
         # self.params['bagging_fraction'] = 0.7
         # self.params['feature_fraction'] = 0.7
@@ -523,7 +519,7 @@ class ltds_54():
             bioce_test += np.log(self.bio_prediction.iloc[i,l])
         self.bio_cross_entropy_test = -bioce_test/len(self.dataset_test[target])
 
-    def _rum_predict(self, data_test = None):
+    def _rum_predict(self, data_test = None,  piece_wise = False):
         '''
         predictions on the test set from the GBRU model
         '''
@@ -532,8 +528,8 @@ class ltds_54():
         target = self.model.loglike.choice.name
         features = [f for f in data_test.columns if f != target]
         test_data = lgb.Dataset(data_test.loc[:, features], label=data_test[[target]], free_raw_data=False)
-        self.gbru_prediction = self.gbru_model.predict(test_data)
         test_data.construct()
+        self.gbru_prediction = self.gbru_model.predict(test_data, piece_wise=piece_wise)
         self.gbru_cross_entropy_test = self.gbru_model.cross_entropy(self.gbru_prediction,test_data.get_label().astype(int))
         self.gbru_accuracy_test = self.gbru_model.accuracy(self.gbru_prediction,test_data.get_label().astype(int))
 
