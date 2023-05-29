@@ -82,10 +82,11 @@ class RUMBooster:
             """
             j = self._current_j
             preds = self._preds[:,j]
+            factor = self.num_classes/(self.num_classes-1)
             eps = 1e-6
             labels = train_set.get_label()
             grad = preds - labels
-            hess = np.maximum(preds * (1 - preds), eps)
+            hess = np.maximum(factor * preds * (1 - preds), eps)
             return grad, hess
             
     def predict(
@@ -409,7 +410,7 @@ class RUMBooster:
     def _preprocess_params(self, params, return_params=False):
         """Set up J set of parameters"""
         params_J = []
-
+        self.num_classes = params['num_classes']
         for struct in self.rum_structure:
             params_j = copy.deepcopy(params)
             params_j['objective'] = 'binary'

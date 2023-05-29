@@ -234,14 +234,17 @@ class ltds():
         self.params['learning_rate'] = lr
         self.params['max_depth'] = md
         
-        self.params['bagging_fraction'] = 1
-        self.params['feature_fraction'] = 1
-        # self.params['max_delta_step'] = 1
-        self.params['lambda_l1'] = 0
-        self.params['lambda_l2'] = 0
-        self.params['min_gain_to_split'] = 0
-        self.params['min_sum_hessian'] = 1e-6
-        self.params['min_data_in_leaf'] = 1
+        # self.params['bagging_fraction'] = 0.935
+        # self.params['feature_fraction'] = 0.679
+        # self.params['feature_fraction_bynode'] = 0.629
+
+        # self.params['lambda_l1'] = 0.003
+        # self.params['lambda_l2'] = 0.0005
+
+        # self.params['min_gain_to_split'] = 4.137
+        # self.params['min_sum_hessian'] = 32
+        # self.params['min_data_in_leaf'] = 1
+        # self.params['max_delta_step'] = 4
 
         data = self.model.database.data
         target = self.model.loglike.choice.name
