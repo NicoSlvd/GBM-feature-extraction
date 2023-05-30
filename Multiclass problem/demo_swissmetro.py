@@ -169,17 +169,21 @@ class swissmetro():
     #def hyperparameter_search()
     #add prediction on the test set for both models
 
-    def compare_models(self, on_test_set = False):
+    def _compare_models(self, on_test_set = True):
         '''
         compare one or several models estimated through biogeme and trained through GBRU, by calculating
         the cross-entropy on the train set.
         '''
-        print('On {}, biogeme has a negative CE of {} and GBRU of {} on the training set'.format(self.dataset_name, 
-                                                                                                 self.bio_cross_entropy,
-                                                                                                 self.gbru_cross_entropy))
+
+        # print('On {}, biogeme has a negative CE of {} and GBRU of {} on the training set'.format(self.dataset_name, 
+        #                                                                                          self.bio_cross_entropy,
+        #                                                                                          self.gbru_cross_entropy))
 
         if on_test_set:
-            print('On {}, biogeme has a negative CE of {} and GBRU of {} on the test set'.\
+            
+            self._bio_predict()
+            self._rum_predict()
+            print('On {}, biogeme has a negative CE of {} and RUMBooster of {} on the test set'.\
                   format(self.dataset_name,self.bio_cross_entropy_test,self.gbru_cross_entropy_test))
             
 
@@ -238,20 +242,66 @@ def bio_to_rumboost(model):
                 rum_structure[k]['monotone_constraints'].append(0)
     return rum_structure
 
-def gbum_train(model, params):
+def rumb_train(model, params):
     rum_structure = bio_to_rumboost(model)
     data = model.database.data
     target = model.loglike.choice.name
     train_data = lgb.Dataset(data, label=data[target]-1, free_raw_data=False)
-    params = {'max_depth': 1, 
-                'num_boost_round': 301, 
-                'objective':'multiclass',
-                'learning_rate': 0.2,
-                'verbosity': 1,
-                'num_classes': 3,
-                'early_stopping_round': 5
-                }
+    model_trained = rum_train(params, train_data, valid_sets=[train_data], rum_structure=rum_structure)
+    print('Maximum Likelihood value: {}'.format(model_trained.best_score*len(data[target])))
+    return model_trained
 
-    return rum_train(params, train_data, valid_sets=[train_data], rum_structure=rum_structure)
+def bio_predict(model, dataset_test, betas):
+    '''
+    predictions on the test set from the biogeme model
+    '''
+    database_test = db.Database('swissmetro_test', dataset_test)
+    
+    globals().update(database_test.variables)
+
+    prob_train = logit(model.loglike.util, model.loglike.av, 1)
+    prob_SM = logit(model.loglike.util, model.loglike.av, 2)
+    prob_car = logit(model.loglike.util, model.loglike.av, 3)
+
+    simulate ={'Prob. train': prob_train,
+                'Prob. SM':  prob_SM,
+                'Prob. car': prob_car}
+    
+    biogeme = bio.BIOGEME(database_test, simulate)
+    biogeme.modelName = "swissmetro_logit_test"
+
+    betaValues = betas
+
+    bio_prediction = biogeme.simulate(betaValues)
+
+    target = model.loglike.choice.name
+
+    bioce_test = 0
+    for i,l in enumerate(dataset_test[target]-1):
+        bioce_test += np.log(bio_prediction.iloc[i,l])
+    return -bioce_test/len(dataset_test[target])
+
+def rum_predict(model, rumb_model, dataset_test):
+    '''
+    predictions on the test set from the GBRU model
+    '''
+    target = model.loglike.choice.name
+    features = [f for f in dataset_test.columns if f != target]
+    test_data = lgb.Dataset(dataset_test.loc[:, features], label=dataset_test[[target]]-1, free_raw_data=False)
+    gbru_prediction = rumb_model.predict(test_data)
+    test_data.construct()
+    gbru_cross_entropy_test = rumb_model.cross_entropy(gbru_prediction,test_data.get_label().astype(int))
+    return gbru_cross_entropy_test
+
+def compare_models(model, rumb_model, dataset_test, betas):
+    '''
+    compare one or several models estimated through biogeme and trained through GBRU, by calculating
+    the cross-entropy on the train set.
+    '''
+
+    bio_cross_entropy_test = bio_predict(model, dataset_test, betas)
+    gbru_cross_entropy_test = rum_predict(model, rumb_model, dataset_test)
+    print('On SwissMetro, biogeme has a negative CE of {} and RUMBooster of {} on the test set'.\
+            format(bio_cross_entropy_test,gbru_cross_entropy_test))
 
 

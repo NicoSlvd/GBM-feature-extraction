@@ -1155,9 +1155,9 @@ def rum_train(
         
             if (params['verbosity'] >= 1) and (i % 10 == 0):
                 if is_valid_contain_train:
-                    print('[{}] -- Logloss value on train set: {}'.format(i + 1, cross_entropy))
+                    print('[{}] -- NCE value on train set: {}'.format(i + 1, cross_entropy))
                 else:
-                    print('[{}] -- Logloss value on train set {} \n     --  Logloss value on test set: {}'.format(i + 1, cross_entropy_train, cross_entropy))
+                    print('[{}] -- NCE value on train set: {} \n     --  NCE value on test set: {}'.format(i + 1, cross_entropy_train, cross_entropy))
         
         #early stopping if early stopping criterion in all boosters
         if (params["early_stopping_round"] != 0) and (rum_booster.best_iteration + params["early_stopping_round"] < i + 1):
