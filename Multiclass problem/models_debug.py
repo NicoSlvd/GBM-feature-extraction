@@ -4,7 +4,7 @@ from LTDS import ltds
 import numpy as np
 import json
 
-#ltds_54_model = ltds_54(model_file='LTDS_54_gbru_model_0.05_depth1_pwFalse_monoTrue_interacTrue.json')
+#ltds_54_model = ltds()
 
 ltds_model = ltds()
 
@@ -12,13 +12,13 @@ ltds_model = ltds()
 
 
 
-#a = ltds_54_model.gbru_model.plot_parameters(ltds_54_model.params, ltds_54_model.dataset_train, utility_names = {'0': 'Walking', '1': 'Cycling', '2': 'Public transport','3': 'Driving'}, save_figure=True)
+#ltds_54_model.gbru_model.plot_parameters(ltds_54_model.params, ltds_54_model.dataset_train, utility_names = {'0': 'Walking', '1': 'Cycling', '2': 'Public transport','3': 'Driving'}, save_figure=True)
 #ltds_model = ltds(model_file='LTDS_gbru_model_0.2_pwFalse.json')
 
-ltds_model.bio_rum_train(valid_test=True, with_pw = False, lr = 0.1, md = 1, all_columns=False, interaction_constraints=True, monotonic_constraints=True, save_model=True)
+ltds_model.bio_rum_train(valid_test=True, with_pw = False, lr = 0.2, md = 2, all_columns=False, interaction_constraints=True, monotonic_constraints=True, save_model=False)
 #b=ltds_model.gbru_model.plot_parameters(ltds_model.params, ltds_model.dataset_train, utility_names = {'0': 'Walking', '1': 'Cycling', '2': 'Public transport','3': 'Driving'}, save_figure=True)
 # #ltds_54_model.bio_rum_train(valid_test=True, lr = 0.1, md = 1, all_columns = False, interaction_constraints=False, monotonic_constraints=True, save_model=False)
-
+print(ltds_model.gbru_model.dump_model())
 # learning_rates = [0.1]
 
 # interaction = [True, False]

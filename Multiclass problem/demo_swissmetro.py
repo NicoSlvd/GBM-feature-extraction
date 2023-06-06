@@ -248,7 +248,7 @@ def rumb_train(model, params):
     target = model.loglike.choice.name
     train_data = lgb.Dataset(data, label=data[target]-1, free_raw_data=False)
     model_trained = rum_train(params, train_data, valid_sets=[train_data], rum_structure=rum_structure)
-    print('Maximum Likelihood value: {}'.format(model_trained.best_score*len(data[target])))
+    print('Maximum Log Likelihood value: {}'.format( - model_trained.best_score*len(data[target])))
     return model_trained
 
 def bio_predict(model, dataset_test, betas):
