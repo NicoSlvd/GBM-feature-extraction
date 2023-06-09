@@ -34,7 +34,7 @@ class ltds():
         self.test_size = 0.2
         self.random_state = 42
 
-        self.params = {'num_boost_round': 3,
+        self.params = {'num_boost_round': 700,
                        'verbosity': 1,
                        'objective':'multiclass',
                        'num_classes': 4,
@@ -201,21 +201,26 @@ class ltds():
         else:
             raise ValueError("Parent does not contain beta and variable")
         
-    def _bio_to_rumboost(self, all_columns = False, monotonic_constraints = True, interaction_contraints = True):
+    def _bio_to_rumboost(self, all_columns = False, monotonic_constraints = True, interaction_contraints = True, max_depth=1):
         '''
         Converts a biogeme model to a rumboost dict
         '''
         utils = self.model.loglike.util
         rum_structure = []
+
         
         for k, v in utils.items():
             rum_structure.append({'columns': [], 'monotone_constraints': [], 'interaction_constraints': [], 'betas': [], 'categorical_feature': []})
+            interac_2d = []
             for i, pair in enumerate(self._process_parent(v, [])):
                 rum_structure[-1]['columns'].append(pair[1])
                 rum_structure[-1]['betas'].append(pair[0])
                 if interaction_contraints:
-                    rum_structure[-1]['interaction_constraints'].append([i])
-                if ('TIME' not in pair[0]) & ('COST' not in pair[0]) & ('DISTANCE' not in pair[0]) & ('TRAFFIC' not in pair[0]):
+                    if (max_depth > 1) and (('dur' in pair[0]) | ('cost' in pair[0])):
+                        interac_2d.append(i)
+                    else:             
+                        rum_structure[-1]['interaction_constraints'].append([i])
+                if ('fueltype' in pair[0]) | ('female' in pair[0]) | ('purpose' in pair[0]) | ('license' in pair[0]) | ('week' in pair[0]):
                     rum_structure[-1]['categorical_feature'].append(i)
                 bounds = self.model.getBoundsOnBeta(pair[0])
                 if monotonic_constraints:
@@ -231,10 +236,12 @@ class ltds():
                         rum_structure[k]['monotone_constraints'].append(0)
             if all_columns:
                 rum_structure[-1]['columns'] = [col for col in self.model.database.data.columns.values.tolist() if col != 'choice']
+            if max_depth > 1:
+                rum_structure[-1]['interaction_constraints'].append(interac_2d)
         return rum_structure
 
     def bio_rum_train(self, valid_test=False, with_pw = False, lr = 0.1, md = 1, all_columns = False, monotonic_constraints = True, interaction_constraints = True, save_model = True):
-        rum_structure = self._bio_to_rumboost(all_columns=all_columns, monotonic_constraints=monotonic_constraints, interaction_contraints=interaction_constraints)
+        rum_structure = self._bio_to_rumboost(all_columns=all_columns, monotonic_constraints=monotonic_constraints, interaction_contraints=interaction_constraints, max_depth=md)
 
         self.params['learning_rate'] = lr
         self.params['max_depth'] = md

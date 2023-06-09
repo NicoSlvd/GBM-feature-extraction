@@ -30,8 +30,8 @@ class swissmetro():
         self.params = {'max_depth': 1, 
                        'num_boost_round': 300, 
                        'objective':'multiclass',
-                       'monotone_constraints': [-1, -1, -1, -1, -1, -1, -1, -1], 
-                       'interaction_constraints': [[0], [1], [2], [3], [4], [5], [6], [7]],
+                       #'monotone_constraints': [-1, -1, -1, -1, -1, -1, -1, -1], 
+                       #'interaction_constraints': [[0], [1], [2], [3], [4], [5], [6], [7]],
                        'learning_rate': 0.2,
                        'verbosity': 1,
                        'num_classes': 3
@@ -228,7 +228,7 @@ def bio_to_rumboost(model):
         for i, pair in enumerate(process_parent(v, [])):
             rum_structure[-1]['columns'].append(pair[1])
             rum_structure[-1]['betas'].append(pair[0])
-            rum_structure[-1]['interaction_constraints'].append([i])
+
             bounds = model.getBoundsOnBeta(pair[0])
             if (bounds[0] is None) and (bounds[1] is None):
                 raise ValueError("Only one bound can be not None")
@@ -240,6 +240,10 @@ def bio_to_rumboost(model):
                     rum_structure[-1]['monotone_constraints'].append(-1)
             else:
                 rum_structure[k]['monotone_constraints'].append(0)
+        
+        rum_structure[-1]['interaction_constraints'].append([0, 1])
+        if int(k) < 2:
+            rum_structure[-1]['interaction_constraints'].append([2])
     return rum_structure
 
 def rumb_train(model, params):
