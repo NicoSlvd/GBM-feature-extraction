@@ -13,7 +13,7 @@ import lightgbm as lgb
 from rumbooster import rum_train, RUMBooster, rum_cv
 from utils import stratified_group_k_fold
 
-class ltds_54():
+class lpmc_t():
 
     def __init__(self, model_file = None):
         '''
@@ -27,17 +27,15 @@ class ltds_54():
         '''
         self.dataset_path_train = 'Data/LTDS_train.csv'
         self.dataset_path_test = 'Data/LTDS_test.csv'
-        self.dataset_name = 'LTDS'
+        self.dataset_name = 'LPMC'
 
-        self.params = {'num_boost_round': 3000,
+        self.params = {'num_boost_round': 10000,
                        'verbosity': 1,
                        'objective':'multiclass',
                        'num_classes': 4,
                        'early_stopping_rounds': 50,
                        'boosting': 'gbdt',
-                       'monotone_constraints_method': 'advanced',
-                       'min_sum_hessian': 1e-6,
-                       'min_data_in_leaf': 1
+                       'monotone_constraints_method': 'advanced'
                       }
 
         self._load_preprocess_data()
@@ -99,10 +97,10 @@ class ltds_54():
         co2 = database_train.DefineVariable('co2', car_ownership == 2)
         weekday = database_train.DefineVariable('weekday', day_of_week < 6)
         saturday = database_train.DefineVariable('saturday', day_of_week == 6)
-        child = database_train.DefineVariable('child', age < 18)
-        pensioner = database_train.DefineVariable('pensioner', age > 64)
+        #child = database_train.DefineVariable('child', age < 18)
+        #pensioner = database_train.DefineVariable('pensioner', age > 64)
         winter = database_train.DefineVariable('winter', travel_month < 3 or travel_month == 12)
-        # ampeak = database_train.DefineVariable('ampeak', self.start_time_linear<9.5 and self.start_time_linear>=6.5, database_train)
+        #ampeak = database_train.DefineVariable('ampeak', start_time_linear<9.5 and start_time_linear>=6.5)
         pmpeak = database_train.DefineVariable('pmpeak', start_time_linear < 19.5 and start_time_linear >= 16.5)
         interpeak = database_train.DefineVariable('interpeak', start_time_linear < 16.5 and start_time_linear >= 9.5)
         distance_km = database_train.DefineVariable('distance_km', distance / 1000)
@@ -122,7 +120,7 @@ class ltds_54():
         logger = blog.get_screen_logger(level=blog.DEBUG)
         logger.info('Model LTDS.py')
 
-        #ASC_WALKING = Beta('ASC_WALKING', 0, None, None, 1)
+        ASC_WALKING = Beta('ASC_WALKING', 0, None, None, 1)
         ASC_CYCLING = Beta('ASC_CYCLING', 0, None, None, 0)
         ASC_PT = Beta('ASC_PT', 0, None, None, 0)
         ASC_DRIVING = Beta('ASC_DRIVING', 0, None, None, 0)
@@ -141,65 +139,70 @@ class ltds_54():
         B_TIME_PT_INT_WALK = Beta('B_TIME_PT_INT_WALK', 0, None, 0, 0)
         B_TIME_PT_INT_WAIT = Beta('B_TIME_PT_INT_WAIT', 0, None, 0, 0)
 
-        #B_PURPOSE_B_WALKING = Beta('B_PURPOSE_B_WALKING', 0, None, None, 1)
+        B_PURPOSE_B_WALKING = Beta('B_PURPOSE_B_WALKING', 0, None, None, 0)
         B_PURPOSE_B_CYCLING = Beta('B_PURPOSE_B_CYCLING', 0, None, None, 0)
         B_PURPOSE_B_PT = Beta('B_PURPOSE_B_PT', 0, None, None, 0)
         B_PURPOSE_B_DRIVING = Beta('B_PURPOSE_B_DRIVING', 0, None, None, 0)
-        #B_PURPOSE_HBW_WALKING = Beta('B_PURPOSE_HBW_WALKING', 0, None, None, 1)
+        B_PURPOSE_HBW_WALKING = Beta('B_PURPOSE_HBW_WALKING', 0, None, None, 0)
         B_PURPOSE_HBW_CYCLING = Beta('B_PURPOSE_HBW_CYCLING', 0, None, None, 0)
         B_PURPOSE_HBW_PT = Beta('B_PURPOSE_HBW_PT', 0, None, None, 0)
         B_PURPOSE_HBW_DRIVING = Beta('B_PURPOSE_HBW_DRIVING', 0, None, None, 0)
-        #B_PURPOSE_HBE_WALKING = Beta('B_PURPOSE_HBE_WALKING', 0, None, None, 1)
+        B_PURPOSE_HBE_WALKING = Beta('B_PURPOSE_HBE_WALKING', 0, None, None, 0)
         # B_PURPOSE_HBE_CYCLING = Beta('B_PURPOSE_HBE_CYCLING',0,-10,10,0)
         B_PURPOSE_HBE_PT = Beta('B_PURPOSE_HBE_PT', 0, None, None, 0)
         B_PURPOSE_HBE_DRIVING = Beta('B_PURPOSE_HBE_DRIVING', 0, None, None, 0)
-        #B_PURPOSE_HBO_WALKING = Beta('B_PURPOSE_HBO_WALKING', 0, None, None, 1)
+        B_PURPOSE_HBO_WALKING = Beta('B_PURPOSE_HBO_WALKING', 0, None, None, 0)
         B_PURPOSE_HBO_CYCLING = Beta('B_PURPOSE_HBO_CYCLING', 0, None, None, 0)
         B_PURPOSE_HBO_PT = Beta('B_PURPOSE_HBO_PT', 0, None, None, 0)
         # B_PURPOSE_HBO_DRIVING = Beta('B_PURPOSE_HBO_DRIVING',0,-10,10,0)
 
-        #B_VEHICLE_OWNERSHIP_1_WALKING = Beta('B_VEHICLE_OWNERSHIP_1_WALKING', 0, None, None, 1)
+        B_VEHICLE_OWNERSHIP_1_WALKING = Beta('B_VEHICLE_OWNERSHIP_1_WALKING', 0, None, None, 0)
         B_VEHICLE_OWNERSHIP_CYCLING = Beta('B_VEHICLE_OWNERSHIP_CYCLING', 0, None, None, 0)
-        B_VEHICLE_OWNERSHIP_1_PT = Beta('B_VEHICLE_OWNERSHIP_1_PT', 0, None, 0, 0)
+        B_VEHICLE_OWNERSHIP_1_PT = Beta('B_VEHICLE_OWNERSHIP_1_PT', 0, None, None, 0)
         B_VEHICLE_OWNERSHIP_1_DRIVING = Beta('B_VEHICLE_OWNERSHIP_1_DRIVING', 0, 0, None, 0)
-        #B_VEHICLE_OWNERSHIP_2_WALKING = Beta('B_VEHICLE_OWNERSHIP_2_WALKING', 0, None, None, 1)
-        B_VEHICLE_OWNERSHIP_2_PT = Beta('B_VEHICLE_OWNERSHIP_2_PT', 0, None, 0, 0)
+        B_VEHICLE_OWNERSHIP_2_WALKING = Beta('B_VEHICLE_OWNERSHIP_2_WALKING', 0, None, None, 0)
+        B_VEHICLE_OWNERSHIP_2_PT = Beta('B_VEHICLE_OWNERSHIP_2_PT', 0, None, None, 0)
         B_VEHICLE_OWNERSHIP_2_DRIVING = Beta('B_VEHICLE_OWNERSHIP_2_DRIVING', 0, 0, None, 0)
 
-        #B_DRIVING_LICENCE_WALKING = Beta('B_DRIVING_LICENCE_WALKING', 0, None, None, 1)
-        B_DRIVING_LICENCE_CYCLING = Beta('B_DRIVING_LICENCE_CYCLING', 0, None, 0, 0)
-        B_DRIVING_LICENCE_PT = Beta('B_DRIVING_LICENCE_PT', 0, None, 0, 0)
+        B_DRIVING_LICENCE_WALKING = Beta('B_DRIVING_LICENCE_WALKING', 0, None, None, 0)
+        B_DRIVING_LICENCE_CYCLING = Beta('B_DRIVING_LICENCE_CYCLING', 0, None, None, 0)
+        B_DRIVING_LICENCE_PT = Beta('B_DRIVING_LICENCE_PT', 0, None, None, 0)
         B_DRIVING_LICENCE_DRIVING = Beta('B_DRIVING_LICENCE_DRIVING', 0, 0, None, 0)
 
-        #B_FEMALE_WALKING = Beta('B_FEMALE_WALKING', 0, None, None, 1)
+        B_FEMALE_WALKING = Beta('B_FEMALE_WALKING', 0, None, None, 0)
         B_FEMALE_CYCLING = Beta('B_FEMALE_CYCLING', 0, None, None, 0)
         B_FEMALE_PT = Beta('B_FEMALE_PT', 0, None, None, 0)
         B_FEMALE_DRIVING = Beta('B_FEMALE_DRIVING', 0, None, None, 0)
 
-        #B_WINTER_WALKING = Beta('B_WINTER_WALKING', 0, None, None, 1)
-        B_WINTER_CYCLING = Beta('B_WINTER_CYCLING', 0, None, 0, 0)
+        B_WINTER_WALKING = Beta('B_WINTER_WALKING', 0, None, None, 0)
+        B_WINTER_CYCLING = Beta('B_WINTER_CYCLING', 0, None, None, 0)
         # B_WINTER_PT = Beta('B_WINTER_PT',0,-10,10,0)
         B_WINTER_DRIVING = Beta('B_WINTER_DRIVING', 0, None, None, 0)
 
-        #B_DISTANCE_WALKING = Beta('B_DISTANCE_WALKING', 0, None, None, 1)
+        B_DISTANCE_WALKING = Beta('B_DISTANCE_WALKING', 0, None, None, 0)
         B_DISTANCE_CYCLING = Beta('B_DISTANCE_CYCLING', 0, None, None, 0)
         B_DISTANCE_PT = Beta('B_DISTANCE_PT', 0, None, None, 0)
         B_DISTANCE_DRIVING = Beta('B_DISTANCE_DRIVING', 0, None, None, 0)
 
-        #B_AGE_CHILD_WALKING = Beta('B_AGE_CHILD_WALKING', 0, None, None, 1)
+        # B_AGE_CHILD_WALKING = Beta('B_AGE_CHILD_WALKING', 0, None, None, 0)
         # B_AGE_CHILD_CYCLING = Beta('B_AGE_CHILD_CYCLING',0,-10,10,0)
-        B_AGE_CHILD_PT = Beta('B_AGE_CHILD_PT', 0, None, None, 0)
-        B_AGE_CHILD_DRIVING = Beta('B_AGE_CHILD_DRIVING', 0, None, None, 0)
-        #B_AGE_PENSIONER_WALKING = Beta('B_AGE_PENSIONER_WALKING', 0, None, None, 1)
-        B_AGE_PENSIONER_CYCLING = Beta('B_AGE_PENSIONER_CYCLING', 0, None, None, 0)
-        B_AGE_PENSIONER_PT = Beta('B_AGE_PENSIONER_PT', 0, None, None, 0)
-        B_AGE_PENSIONER_DRIVING = Beta('B_AGE_PENSIONER_DRIVING', 0, None, None, 0)
+        # B_AGE_CHILD_PT = Beta('B_AGE_CHILD_PT', 0, None, None, 0)
+        # B_AGE_CHILD_DRIVING = Beta('B_AGE_CHILD_DRIVING', 0, None, None, 0)
+        # B_AGE_PENSIONER_WALKING = Beta('B_AGE_PENSIONER_WALKING', 0, None, None, 0)
+        # B_AGE_PENSIONER_CYCLING = Beta('B_AGE_PENSIONER_CYCLING', 0, None, None, 0)
+        # B_AGE_PENSIONER_PT = Beta('B_AGE_PENSIONER_PT', 0, None, None, 0)
+        # B_AGE_PENSIONER_DRIVING = Beta('B_AGE_PENSIONER_DRIVING', 0, None, None, 0)
 
-        #B_DAY_WEEK_WALKING = Beta('B_DAY_WEEK_WALKING', 0, None, None, 1)
+        B_AGE_WALKING = Beta('B_AGE_PENSIONER_WALKING', 0, None, None, 0)
+        B_AGE_CYCLING = Beta('B_AGE_PENSIONER_CYCLING', 0, None, None, 0)
+        B_AGE_PT = Beta('B_AGE_PENSIONER_PT', 0, None, None, 0)
+        B_AGE_DRIVING = Beta('B_AGE_PENSIONER_DRIVING', 0, None, None, 0)
+
+        B_DAY_WEEK_WALKING = Beta('B_DAY_WEEK_WALKING', 0, None, None, 0)
         # B_DAY_WEEK_CYCLING = Beta('B_DAY_WEEK_CYCLING',0,-10,10,0)
         B_DAY_WEEK_PT = Beta('B_DAY_WEEK_PT', 0, None, None, 0)
         B_DAY_WEEK_DRIVING = Beta('B_DAY_WEEK_DRIVING', 0, None, None, 0)
-        #B_DAY_SAT_WALKING = Beta('B_DAY_SAT_WALKING', 0, None, None, 1)
+        B_DAY_SAT_WALKING = Beta('B_DAY_SAT_WALKING', 0, None, None, 0)
         B_DAY_SAT_CYCLING = Beta('B_DAY_SAT_CYCLING', 0, None, None, 0)
         B_DAY_SAT_PT = Beta('B_DAY_SAT_PT', 0, None, None, 0)
         # B_DAY_SAT_DRIVING = Beta('B_DAY_SAT_DRIVING',0,-10,10,0)
@@ -208,11 +211,11 @@ class ltds_54():
         # B_DEPARTURE_AM_PEAK_CYCLING = Beta('B_DEPARTURE_AM_PEAK_CYCLING',0,-10,10,0)
         # B_DEPARTURE_AM_PEAK_PT = Beta('B_DEPARTURE_AM_PEAK_PT',0,-10,10,0)
         # B_DEPARTURE_AM_PEAK_DRIVING = Beta('B_DEPARTURE_AM_PEAK_DRIVING',0,-10,10,0)
-        #B_DEPARTURE_PM_PEAK_WALKING = Beta('B_DEPARTURE_PM_PEAK_WALKING', 0, None, None, 1)
+        B_DEPARTURE_PM_PEAK_WALKING = Beta('B_DEPARTURE_PM_PEAK_WALKING', 0, None, None, 0)
         B_DEPARTURE_PM_PEAK_CYCLING = Beta('B_DEPARTURE_PM_PEAK_CYCLING', 0, None, None, 0)
         B_DEPARTURE_PM_PEAK_PT = Beta('B_DEPARTURE_PM_PEAK_PT', 0, None, None, 0)
         B_DEPARTURE_PM_PEAK_DRIVING = Beta('B_DEPARTURE_PM_PEAK_DRIVING', 0, None, None, 0)
-        #B_DEPARTURE_INTER_PEAK_WALKING = Beta('B_DEPARTURE_INTER_PEAK_WALKING', 0, None, None, 1)
+        B_DEPARTURE_INTER_PEAK_WALKING = Beta('B_DEPARTURE_INTER_PEAK_WALKING', 0, None, None, 0)
         B_DEPARTURE_INTER_PEAK_CYCLING = Beta('B_DEPARTURE_INTER_PEAK_CYCLING', 0, None, None, 0)
         # B_DEPARTURE_INTER_PEAK_PT = Beta('B_DEPARTURE_INTER_PEAK_PT',0,-10,10,0)
         B_DEPARTURE_INTER_PEAK_DRIVING = Beta('B_DEPARTURE_INTER_PEAK_DRIVING', 0, None, None, 0)
@@ -222,43 +225,45 @@ class ltds_54():
 
         # Utility functions
 
-        V1 = (#ASC_WALKING +
-              B_TIME_WALKING * dur_walking
-              #B_PURPOSE_B_WALKING * purpose_B +
-              #B_PURPOSE_HBW_WALKING * purpose_HBW +
-            #   B_PURPOSE_HBE_WALKING * purpose_HBE +
-            #   B_PURPOSE_HBO_WALKING * purpose_HBO +
-            #   B_VEHICLE_OWNERSHIP_1_WALKING * co1 +
-            #   B_VEHICLE_OWNERSHIP_2_WALKING * co2 +
-            #   B_FEMALE_WALKING * female +
-            #   B_WINTER_WALKING * winter +
+        V1 = (ASC_WALKING +
+              B_TIME_WALKING * dur_walking +
+              B_PURPOSE_B_WALKING * purpose_B +
+              B_PURPOSE_HBW_WALKING * purpose_HBW +
+              B_PURPOSE_HBE_WALKING * purpose_HBE +
+              B_PURPOSE_HBO_WALKING * purpose_HBO +
+              B_VEHICLE_OWNERSHIP_1_WALKING * co1 +
+              B_VEHICLE_OWNERSHIP_2_WALKING * co2 +
+              B_FEMALE_WALKING * female +
+              B_WINTER_WALKING * winter +
             #   B_AGE_CHILD_WALKING * child +
             #   B_AGE_PENSIONER_WALKING * pensioner +
-            #   B_DRIVING_LICENCE_WALKING * driving_license +
-            #   B_DAY_WEEK_WALKING * weekday +
-            #   B_DAY_SAT_WALKING * saturday +
-              # B_DEPARTURE_AM_PEAK_WALKING * ampeak +
-            #   B_DEPARTURE_INTER_PEAK_WALKING * interpeak +
-            #   B_DEPARTURE_PM_PEAK_WALKING * pmpeak +
-            #   B_DISTANCE_WALKING * distance_km
+              B_AGE_WALKING * age +
+              B_DRIVING_LICENCE_WALKING * driving_license +
+              B_DAY_WEEK_WALKING * weekday +
+              B_DAY_SAT_WALKING * saturday +
+            #   B_DEPARTURE_AM_PEAK_WALKING * ampeak +
+              B_DEPARTURE_INTER_PEAK_WALKING * interpeak +
+              B_DEPARTURE_PM_PEAK_WALKING * pmpeak +
+              B_DISTANCE_WALKING * distance_km
               )
 
         V2 = (ASC_CYCLING +
               B_TIME_CYCLING * dur_cycling +
               B_PURPOSE_B_CYCLING * purpose_B +
               B_PURPOSE_HBW_CYCLING * purpose_HBW +
-              # B_PURPOSE_HBE_CYCLING * purpose_HBE +
+            #   B_PURPOSE_HBE_CYCLING * purpose_HBE +
               B_PURPOSE_HBO_CYCLING * purpose_HBO +
               B_VEHICLE_OWNERSHIP_CYCLING * co1 +
               B_VEHICLE_OWNERSHIP_CYCLING * co2 +
               B_FEMALE_CYCLING * female +
               B_WINTER_CYCLING * winter +
-              # B_AGE_CHILD_CYCLING * child +
-              B_AGE_PENSIONER_CYCLING * pensioner +
+            #   B_AGE_CHILD_CYCLING * child +
+            #   B_AGE_PENSIONER_CYCLING * pensioner +
+              B_AGE_CYCLING * age +
               B_DRIVING_LICENCE_CYCLING * driving_license +
-              # B_DAY_WEEK_CYCLING * weekday +
+            #   B_DAY_WEEK_CYCLING * weekday +
               B_DAY_SAT_CYCLING * saturday +
-              # B_DEPARTURE_AM_PEAK_CYCLING * ampeak +
+            #   B_DEPARTURE_AM_PEAK_CYCLING * ampeak +
               B_DEPARTURE_INTER_PEAK_CYCLING * interpeak +
               B_DEPARTURE_PM_PEAK_CYCLING * pmpeak +
               B_DISTANCE_CYCLING * distance_km
@@ -278,14 +283,15 @@ class ltds_54():
               B_VEHICLE_OWNERSHIP_1_PT * co1 +
               B_VEHICLE_OWNERSHIP_2_PT * co2 +
               B_FEMALE_PT * female +
-              # B_WINTER_PT * winter +
-              B_AGE_CHILD_PT * child +
-              B_AGE_PENSIONER_PT * pensioner +
+            #   B_WINTER_PT * winter +
+            #   B_AGE_CHILD_PT * child +
+            #   B_AGE_PENSIONER_PT * pensioner +
+              B_AGE_PT * age +
               B_DRIVING_LICENCE_PT * driving_license +
               B_DAY_WEEK_PT * weekday +
               B_DAY_SAT_PT * saturday +
-              # B_DEPARTURE_AM_PEAK_PT * ampeak +
-              # B_DEPARTURE_INTER_PEAK_PT * interpeak +
+            #   B_DEPARTURE_AM_PEAK_PT * ampeak +
+            #   B_DEPARTURE_INTER_PEAK_PT * interpeak +
               B_DEPARTURE_PM_PEAK_PT * pmpeak +
               B_DISTANCE_PT * distance_km
               )
@@ -297,17 +303,18 @@ class ltds_54():
               B_PURPOSE_B_DRIVING * purpose_B +
               B_PURPOSE_HBW_DRIVING * purpose_HBW +
               B_PURPOSE_HBE_DRIVING * purpose_HBE +
-              # B_PURPOSE_HBO_DRIVING * purpose_HBO +
+            #   B_PURPOSE_HBO_DRIVING * purpose_HBO +
               B_VEHICLE_OWNERSHIP_1_DRIVING * co1 +
               B_VEHICLE_OWNERSHIP_2_DRIVING * co2 +
               B_FEMALE_DRIVING * female +
               B_WINTER_DRIVING * winter +
-              B_AGE_CHILD_DRIVING * child +
-              B_AGE_PENSIONER_DRIVING * pensioner +
+            #   B_AGE_CHILD_DRIVING * child +
+            #   B_AGE_PENSIONER_DRIVING * pensioner +
+              B_AGE_DRIVING * age +
               B_DRIVING_LICENCE_DRIVING * driving_license +
               B_DAY_WEEK_DRIVING * weekday +
-              # B_DAY_SAT_DRIVING * saturday +
-              # B_DEPARTURE_AM_PEAK_DRIVING * ampeak +
+            #   B_DAY_SAT_DRIVING * saturday +
+            #   B_DEPARTURE_AM_PEAK_DRIVING * ampeak +
               B_DEPARTURE_INTER_PEAK_DRIVING * interpeak +
               B_DEPARTURE_PM_PEAK_DRIVING * pmpeak +
               B_DISTANCE_DRIVING * distance_km
@@ -386,7 +393,7 @@ class ltds_54():
         else:
             raise ValueError("Parent does not contain beta and variable")
         
-    def _bio_to_rumboost(self, all_columns = False, monotonic_constraints = True, interaction_contraints = True):
+    def _bio_to_rumboost(self, all_columns = False, monotonic_constraints = True, interaction_contraints = True, max_depth = 1):
         '''
         Converts a biogeme model to a rumboost dict
         '''
@@ -419,7 +426,7 @@ class ltds_54():
         return rum_structure
 
     def bio_rum_train(self, valid_test=False, with_pw = False, lr = 0.1, md=1, all_columns = False, monotonic_constraints = True, interaction_constraints = True, save_model = True):
-        rum_structure = self._bio_to_rumboost(all_columns=all_columns, monotonic_constraints=monotonic_constraints, interaction_contraints=interaction_constraints)
+        rum_structure = self._bio_to_rumboost(all_columns=all_columns, monotonic_constraints=monotonic_constraints, interaction_contraints=interaction_constraints, max_depth=md)
         
         self.params['learning_rate'] = lr
         self.params['max_depth'] = md
@@ -430,6 +437,12 @@ class ltds_54():
         # self.params['max_delta_step'] = 1
         # self.params['lambda_l1'] = 0.006
         # self.params['lambda_l2'] = 2
+        
+        self.params['min_sum_hessian'] = 1e-6
+        self.params['min_data_in_leaf'] = 1
+        
+        self.params['max_bin'] = 100000
+        self.params['min_data_in_bin'] = 1
 
         data = self.model.database.data
         target = self.model.loglike.choice.name
@@ -448,7 +461,7 @@ class ltds_54():
         self.gbru_model = model_rumtrained
 
         if save_model:
-            self.gbru_model.save_model('LTDS_54_gbru_model_{}_depth{}_pw{}_mono{}_interac{}.json'.format(self.params['learning_rate'], md, with_pw, monotonic_constraints, interaction_constraints))
+            self.gbru_model.save_model('LPMC_RUMBoost_v1-Tim-all_lr{}_depth{}_pw{}_mono{}_interac{}.json'.format(self.params['learning_rate'], md, with_pw, monotonic_constraints, interaction_constraints))
 
     def hyperparameter_optim(self):
         '''

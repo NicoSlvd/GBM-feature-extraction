@@ -918,13 +918,13 @@ class RUMBooster:
         #         lr_unc = 0.3
         
         #get and prepare weights
-        weights_arranged = self.weights_to_plot()
+        weights_arranged = self.weights_to_plot_v2()
 
         if with_pw:
             pw_func = self.plot_util_pw(X)
         
         if model_unconstrained is not None:
-            weights_arranged_unc = self.weights_to_plot(model=model_unconstrained)
+            weights_arranged_unc = self.weights_to_plot_v2(model=model_unconstrained)
 
         sns.set_theme()
         
@@ -941,7 +941,7 @@ class RUMBooster:
                 plt.figure(figsize=(10, 6))
 
                                     
-                plt.title('Influence of {} on the predictive function (utility)'.format(f), fontdict={'fontsize':  16})
+                plt.title('Influence of {} on the predictive function ({} utility)'.format(f, utility_names[u]), fontdict={'fontsize':  16})
                 if 'dur' in f:
                     plt.xlabel('{} [h]'.format(f))
                 elif 'time' in f:
@@ -1003,7 +1003,7 @@ class RUMBooster:
                             plt.legend(labels = ['RUMBooster'])
 
                 if save_figure:
-                    plt.savefig('Figures/finalfinal {} utility, {} feature.png'.format(utility_names[u], f))
+                    plt.savefig('Figures/rumbooster_v3_lr3e-1 {} utility, {} feature.png'.format(utility_names[u], f))
 
                 plt.show()
 
